@@ -11,24 +11,20 @@ specified in a schema file, that is itself a One-Code data file.  A generic conv
 binary representations of data, and another core tool is provided to validate files against a 
 given schema.
 
-There are currently two packages.  **Core** contains the general One-Code command-line utilities
-alluded to above, and a C-library supporting the development of One-Code applications.
-**VGP** contains the VGP-formats schema designed specifically for DNA sequencing and assembly applications, and a growing number of VGP-tools for importing and operating on data in this schema.
-
 To make the library and command line tools just type ```make``` in this top
-level directory.  The package has no dependencies on other software.
+level directory.  The package has no dependencies on other software.  The .md files contain documentation, ONElib.c & .h contain the C-library for developers, and the rest is for generic tools.  The subdirectory `DEVELOPMENT` contains work areas for developers, currently Richard and Gene.
 
 The documents describing the framework, generic tools, and development library are as follows:
 
 - [Framework Description](https://github.com/VGP/vgp-tools/blob/master/Core/Format-description.md): a description of One-Code schema's and the data representation framework.
 
-- [Generic Tools](https://github.com/VGP/vgp-tools/blob/master/Core/Generic-tools.md): the man pages for the generic One-Code command line tools,
+- [Generic Tools](https://github.com/VGP/vgp-tools/blob/master/Core/Generic-tools.md): the man pages for the generic One-Code command line tools.
 
 - [Library Interface](https://github.com/VGP/vgp-tools/blob/master/Core/Library-interface.md):
-a standard C library interface for One-Code developers: 
+a standard C library interface for One-Code developers.
 
 In addition, specific technical documentation can be found within individual source files.
 
-Authors:  Gene Myers & Richard Durbin
+Authors:  Richard Durbin & Gene Myers
 
 Date: October 2023
