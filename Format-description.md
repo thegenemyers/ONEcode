@@ -1,31 +1,21 @@
-# VGP-tools format description and schema definition
+# ONE-code data files and schemas
 
-### Authors:  Gene Myers, Richard Durbin, and the Vertebrate Genome Project Assembly Group
-### Last Update: April 13, 2020
+### Authors:  Gene Myers & Richard Durbin
+### Last Update: October 19, 2022
 
 ## 0. Introduction
 
-This document describes the generic VGP-Tools file structure.
-For other VGP tools documentation see the top level [README.md](https://github.com/VGP/vgp-tools/blob/master/README.md).
+This document describes ONE-code data files and the schema's that describe them.
 
-VGP files are container for objects of a single *type*.  There are *primary* types, each of
-which has its own schema, and *secondary* types which are specialisations of a primary type for
-particular applications, requiring particular properties or fields to be present.
-Every primary and secondary file type is assigned a 3-letter lower case string, that can be used as a filename suffix, e.g. dataset1.seq
-or dataset2.pbr.  For example, from the [standard  VGP sequence sequence schema](https://github.com/VGP/vgp-tools/blob/master/VGP-sequence-schema.md),
+Each 1-code data file is a container for objects of a single *type*.  There are *primary* types and *secondary* types which are specialisations of a primary type for
+particular applications, requiring particular properties or fields to be present by convention.
+Every primary and secondary file type is assigned a 3-letter lower case string, that can be used as a filename suffix, e.g. dataset.seq or bigdata.kmr.  For example, a primary data type could be  sequence, with secondary types k-mer, illumina read-pair, pacbio long read, and contig that are specialization of sequence to particular types of sequences.
 
-- **.seq**   primary file type for sequence objects
-	- **.irp** for Illumina read pairs
-	- **.pbr** for PacBio long reads and relevant meta-data
-	- **.10x** for 10X Genomics read clouds with their extracted barcodes
-	- **.ctg** for contigs from an assembly
-	- **.kmr** for sets of kmers
+We describe here the ASCII version of a data file.  There is always a binary version encoding the same information that is more compact and efficient that can be produced either by converting an ASCII version with ONEview, or directly with our C support library.  The binary versions are distinguished by having the same suffix as the ASCII version, but with a "1" prepended, e.g. dataset.1seq.
 
-We describe here the ASCII version of the format, which gives the specification.  There is also a binary version encoding the same information that is more compact and efficient.  
-
-Every VGP file begins with a header segment followed by a data segment.  Headers, relevant for all
+Every ASCII 1-code file begins with a header segment followed by a data segment.  Headers, relevant for all
 file types, are described in Chapter 1 following this introduction, and the encoding of the data is documented in Chapter 2.
-The utility program **VGPstat** validates the format of any given file against the schema, and also
+The utility program **ONEstat** validates the format of any given file against the schema, and also
 can optionally reconstruct a file's header segment given only the data part.
 
 Each line in either the header or data section starts with a single character ("1-code") which determines the encoding of the remainder of the line. Header lines are specified by *non-alphabetic* characters, and data lines by *alphabetic* letters.  Consider as an example the following Illumina read pair (.irp) file:
@@ -49,7 +39,7 @@ Each line in either the header or data section starts with a single character ("
      S 5 cctac              sequence 6
 ```
 
-The design of VGP formats is based on the following principles:
+The design of the ONE-code data file format is based on the following principles:
 
 1.	The format should be trivial to parse as input.  All the burden of encoding is placed
 on the software that produces the formatted file.
@@ -75,13 +65,13 @@ object of a given type is referred to by the number n in any future context with
 where each tool application is described by its name, version number, command line applied,
 and date & time performed. 
 
-Syntactically, the goal is that an ASCII VGP file should be readable by a simple parser that can
+Syntactically, the goal is that an ASCII 1-code data file should be readable by a simple parser that can
 (a) read the next character, (b) read the next integer, (c) read the next real number, (d) read the next n symbols, and
 (e) skip to the next line, where tokens are separated by a single white space character.
-Moreover, any program reading in VGP data should never require dynamic memory
+Moreover, any program reading in 1-code data should never require dynamic memory
 allocation to store objects – the size of any object or object collection should be given
-before the first object of that type is described.  We realized this by designing VGP formats
-so that every file begins with a header section that gives the number of objects, maximum size
+before the first object of that type is described.  We realized this by designing the 1-code data files
+so that each begins with a header section that gives the number of objects, maximum size
 of an object, and total size of all objects, along with the provenance information of Principle 8.
 
 The "1-code" design supports Principle 5.  The sequence of items on the remainder of the line is determined by the code.  Tokens are separated by a single space character.  Variable length lists,
