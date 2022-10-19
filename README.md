@@ -16,11 +16,11 @@ level directory.  The package has no dependencies on other software.  The .md fi
 
 The documents describing the framework, generic tools, and development library are as follows:
 
-- [Framework Description](https://github.com/VGP/vgp-tools/blob/master/Core/Format-description.md): a description of One-Code schema's and the data representation framework.
+- [Framework Description](https://github.com/ONE-Code/blob/master/Core/Format-description.md): a description of One-Code schema's and the data representation framework.
 
-- [Generic Tools](https://github.com/VGP/vgp-tools/blob/master/Core/Generic-tools.md): the man pages for the generic One-Code command line tools.
+- [Generic Tools](https://github.com/ONE-Code/blob/master/Core/Generic-tools.md): the man pages for the generic One-Code command line tools.
 
-- [Library Interface](https://github.com/VGP/vgp-tools/blob/master/Core/Library-interface.md):
+- [Library Interface](https://github.com/ONE-Code/blob/master/Core/Library-interface.md):
 a standard C library interface for One-Code developers.
 
 In addition, specific technical documentation can be found within individual source files.

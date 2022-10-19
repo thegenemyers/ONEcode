@@ -2032,7 +2032,7 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
               lx->bufSize = ns;
             }
           ((I64 *) lx->buffer)[vf->object] = vf->byte;
-          assert (ftello (vf->f) == vf->byte) ;
+          // assert (ftello (vf->f) == vf->byte) ;
 
           ++vf->object ;
         }
