@@ -1,17 +1,17 @@
-# ONE-code data files and schemas
+# 1-Code Data Files and Schemas
 
 ### Authors:  Gene Myers & Richard Durbin
 ### Last Update: October 19, 2022
 
 ## 0. Introduction
 
-This document describes ONE-code data files and the schema's that describe them.
+This document describes 1-code data files and the schema's that describe them.
 
-Each 1-code data file is a container for objects of a single *type*.  There are *primary* types and *secondary* types which are specialisations of a primary type for
+Each 1-code data file is a container for objects of a single *type*.  There are *primary* types and *secondary* types which are specializations of a primary type for
 particular applications, requiring particular properties or fields to be present by convention.
-Every primary and secondary file type is assigned a 3-letter lower case string, that can be used as a filename suffix, e.g. dataset.seq or bigdata.kmr.  For example, a primary data type could be  sequence, with secondary types k-mer, illumina read-pair, pacbio long read, and contig that are specialization of sequence to particular types of sequences.
+Every primary and secondary file type is assigned a 3-letter lower case string, that can be used as a filename suffix, e.g. dataset.seq or bigdata.kmr.  For example, a primary data type could be  sequence, with secondary types k-mer, illumina read-pair, pacbio long read, and contig that are specializations of sequence to particular types of sequences.
 
-We describe here the ASCII version of a data file.  There is always a binary version encoding the same information that is more compact and efficient that can be produced either by converting an ASCII version with ONEview, or directly with our C support library.  The binary versions are distinguished by having the same suffix as the ASCII version, but with a "1" prepended, e.g. dataset.1seq.
+We describe here the ASCII version of a data file.  There is always a binary version encoding the same information that is much more compact and efficient that can be produced either by converting an ASCII version with ONEview, or produced directly with our C support library.  The binary versions are distinguished by having the same suffix as the ASCII version, but with a "1" prepended, e.g. dataset.1seq.
 
 Every ASCII 1-code file begins with a header segment followed by a data segment.  Headers, relevant for all
 file types, are described in Chapter 1 following this introduction, and the encoding of the data is documented in Chapter 2.
