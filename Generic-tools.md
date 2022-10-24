@@ -1,9 +1,7 @@
 # 1-Code Generic Command Line Tools
 
-Authors: Richard Durbin & Gene Myers
-
-Last Update: April 13, 2020
-
+### Authors:  Richard Durbin & Gene Myers
+### Last Update: October 19, 2022
 
 This document describes generic command line tools for interacting with One-Code files.
 
