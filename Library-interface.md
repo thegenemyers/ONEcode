@@ -1,5 +1,8 @@
 # The One Tools C library interface
 
+### Authors:  Gene Myers & Richard Durbin
+### Last Update: October 19, 2022
+
 The interface is defined in `Onelib.h`.  There are 23 functions and 9 macros, with one primary
 type `OneFile` which maintains information about the file being read or written, including the current line.
 
