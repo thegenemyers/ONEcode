@@ -208,7 +208,7 @@ line optionally followed by a subtype line and provenance information.  Then ens
 data line of the file type.  And finally, at the end, any relevant reference- and forward-lines.  In a rule:
 
 ```
-    <header> = <version_header> [<subtype_header>] |<provenance_step>+
+    <header> = <version_header> [<subtype_header>] <provenance_step>+
                    (<size_header>|<group_header>)+ (<reference_header>|<forward_header>)+
 ```
 
