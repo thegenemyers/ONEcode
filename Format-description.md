@@ -214,11 +214,54 @@ data line of the file type.  And finally, at the end, any relevant reference- an
 
 ## 2. 1-Code Data
 
-Every data line has a type designated by a letter. The types of data
-lines permitted depend on the schema associated to the primary file type.
-At most one data line type can be used to start a new *group* of objects.
+Every data line begins with a type designated by a single alphabetic letter.
+This is then followed by a number of arguments as defined by the schema for the file.
+All tokens are separated by a single space character, and lists are proceeded by an
+integer giving the length of the list.  After the last argument, any text to the end of the line
+is considered a comment.
+
+```
+    <data>      = <data_line>*
+      <data_line> = <char:1-code> <datum>*
+```
+1-code supports arguments of the following types: CHAR, INT, REAL, STRING, INT\_LIST, REAL\_LIST, STRING\_LIST, and DNA.  One does not need to worry about the word-size of integers or reals, they both accommodate the machine maximum of 64-bits but internally are encoded more efficiently when possible.  Note that a STRING is just a CHAR\_LIST, and DNA represents a STRING over the letters acgt where case is ignored.  DNA strings are handled internally in a more efficient way then general strings, hence the distinction.  Finally, note that a STRING\_LIST is subtle in that it is technically a list of lists, e.g. ```3 1 a 5 small 7 example```, requiring clarification for the meaning of any relevant size lines in the header.
+
+```
+    <datum>       = <scalar_data> | <list_data>
+      <scalar_data> = <char> | <int> | <real>
+      <list_data>   = <string> | <list_of(int)> | <list_of(real)> | <list_of(string)> | <dna> 
+        <list_of(T)>  = <int:n> <T>^n
+          <dna>         = <list_of([acgtACGT]>
+```
+
+There is always one line type that specifies the object being encoded in a data file.  All other data lines provide auxiliary information, and are associated with an object by convention, e.g. those lines immediately following an object line, or say the P-lines applying to the next two objects in our running example.
+
+The one special auxiliary line is a group line type, of which there can currently only be one in the current implementation.  By convention a group line begins with a lower-case alphabetic letter, whereas normal data lines begin with a capital letter.  The group lines conceptually partition the file into the segments between them.  If there are data lines before the first group line, then those lines are not in any group.  In the binary 1-code version, the number of objects in each group is always the first field of the line, and the file can be indexed by group (as well as by object).  In the ASCI version, group size is not necessarily known, in which case the first field has value 0.
 
 ## 3. 1-Code Schemas
 
+The 1-code framework allows one to encode almost any kind of data.  A schema for a primary or secondary file type specifies the type of lines that can be in a data file of that type and their arguments.  The schema applicable to a given file is given in the header with the exception that one can produce an ASCII data file without header or schema and subsequently create the header and associate the schema with the generic 1-code tools.
 
+Schemas are themselves specified in the 1-code format, save that there is no schema for schemas &#x1F609;, the line types are predefined.  A schema always begins with a P-line that has a 3-letter string argumnt specifying the primary file type suffix extension.
 
+```
+    <primary_type> = P <string:file_type>
+```
+
+This can then be optionally followed by an S-line that similarly specifies the secondary suffix extension.
+
+```
+    <secondary_type> = S <string:file_type>
+```
+
+The remaining lines specify data lines by giving their defining 1-code character followed by the argument types for such a line:
+
+```
+    <data_line> = [ODG] <char> <field_list>
+      <field_list>   = <int:n> <field>^n
+        <field>        = <scalar_field> | <list_field>
+          <scalar_field> = '4 CHAR' | '3 INT' | '4 REAL'
+          <list_field>   = '6 STRING' | '8 INT_LIST' | '9 REAL_LIST' | '11 STRING_LIST' | '3 DNA' 
+```
+
+An O-line specifies that the data line being defined is considered the object of the data file type.  There can only be one such line.  A G-line specifies
