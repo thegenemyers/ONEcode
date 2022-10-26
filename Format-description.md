@@ -248,7 +248,7 @@ Schemas are themselves specified in the 1-code format, save that there is no sch
     <primary_type> = P <string:file_type>
 ```
 
-This can then be optionally followed by an S-line that similarly specifies the secondary suffix extension.
+This can then be optionally followed by an S-line that similarly specifies the secondary suffix extension.  In this case, the schema is defining the secondary file type.
 
 ```
     <secondary_type> = S <string:file_type>
@@ -258,10 +258,20 @@ The remaining lines specify data lines by giving their defining 1-code character
 
 ```
     <data_line> = [ODG] <char> <field_list>
+```
+
+An O-line specifies that the data line being defined is considered the object of the data file type.  There can only be one such line.  A G-line specifies that the data line being defined is a group line.  While conceptually there is no reason for a limitation, the current implementation of 1-code allows only one such line ins a schema.  Finally, D-lines define any number of auxiliary data lines that augment the content of the primary objects.
+
+```
       <field_list>   = <int:n> <field>^n
         <field>        = <scalar_field> | <list_field>
           <scalar_field> = '4 CHAR' | '3 INT' | '4 REAL'
           <list_field>   = '6 STRING' | '8 INT_LIST' | '9 REAL_LIST' | '11 STRING_LIST' | '3 DNA' 
 ```
 
-An O-line specifies that the data line being defined is considered the object of the data file type.  There can only be one such line.  A G-line specifies
+The fields of a line are specified with the special strings CHAR, INT, etc. corresponding to the data types supported by the 1-code framework.
+
+In summary a schema is:
+
+```
+    <schema> = <primary_type> [<secondary_type] <data_line>*
