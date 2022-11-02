@@ -1,7 +1,7 @@
 # 1-Code Data Files and Schemas
 
 ### Authors:  Gene Myers & Richard Durbin
-### Last Update: October 19, 2022
+### Last Update: November 1, 2022
 
 ## 0. Introduction
 
@@ -67,7 +67,8 @@ Each line in either the header or data section starts with a single character (t
      # S 6                  number of sequences in file
      @ S 5                  maximum number of bp’s in a read
      + S 26                 total number of bp's in file
-     P                      data start: separator for read pairs - helps human interpretability 
+     . Start of Data Section
+     P                      separator for read pairs - helps human interpretability 
      S 5 acgta              forward sequence of pair 1
      S 3 gtt                reverse sequence of pair 1
      P                      pair 2
@@ -81,7 +82,7 @@ Each line in either the header or data section starts with a single character (t
 The header codes in the example are '1', '2', '!', '#', '@', and '+', and the data codes are either 'P' or 'S'.  The sequence of items on the remainder of the line is determined by the code.  Tokens are separated by a single space character.  Variable length lists,
 including strings, are preceded by their length in keeping with Principle 2.
 Thus, the specific 1-code and
-any subsequent list length items determine when the encoding of information on a line is at an end, so that any additional text on a line is understood to be a comment, as in the example, or auxiliary information providing a mechanism for extensibility.
+any subsequent list length items determine when the encoding of information on a line is at an end, so that any additional text on a line is understood to be a comment, as in the example, or auxiliary information providing a mechanism for extensibility.  In addition, a line with a 1-code of '.' is also considered a comment in its entirety.
 
 The first header line must always be a 1-line confirming the primary file type and specifying
 the major and minor version numbers separated by whitespace.
@@ -97,7 +98,7 @@ giving the two sequence reads in the pair.
 
 Conceptually 1-code files are *immutable*, meaning that we do not expect their contents to change.
 This means that subsequently in the same file, or more often in future files in a pipeline, we
-can refer to objects by their ordinal position in a file, 0...n-1, not requiring named identifiers
+can refer to objects by their ordinal position in a file, 1...n, not requiring named identifiers
 (Principle 6). 
 
 The type and arguments of each data line in a particular type of 1-code data file are specified by a schema.  These schemas are part of each data file so that the file is self documenting.
@@ -107,7 +108,7 @@ The one exemption is potentially an ASCII file produced by an external program, 
      P 3 seq           primary type is .seq
      S 3 irp           secondary type is .irp
      O S 1 3 DNA       objects are DNA sequences given in S-lines
-     D P 0             sequences are paired by proceeding their consecutive S-lines with a P-line
+     D P 0             sequences are paired by proceeding their S-lines with a P-line
 ``` 
 
 A schema file consists of predefined 'P', 'S', 'O', and 'D' lines.  A single, leading P-line specifies the primary type file extension and may be followed optionally be an S-line giving the
@@ -126,6 +127,7 @@ regular expression, where ```*``` denotes 0-or-more, ```+``` 1-or-more, ```^n```
 repetitions, ```|``` separates two alternatives, an item between square brackets ```[]``` is
 optional, and parentheses may be used to disambiguate precedence.  For example, a string
 is defined by the rule:
+
 ```
     <string> = <int:n> <char>^n
 ```
@@ -154,6 +156,20 @@ program name, (b) the version of that program as a string, (c) the command line 
 ```
     <provenance_step> = ! <string:name> <string:version> <string:command> <string:date>
 ```
+
+The schema for a data file is always embedded within the file save in those occassional cases where the file is created by an external agent.  If present it is listed in the header with each schema line (see Section2 below) preceeded with a 1-code of '~': 
+
+```
+    <schema_line> = ~ ( <primary_type> | <secondary_type|  <data_line> )
+```
+See Section 2 for the definition of the schema line types.  For example, the schema for our example, when embedded in the header has the form:
+
+```
+     ~ P 3 seq           primary type is .seq
+     ~ S 3 irp           secondary type is .irp
+     ~ O S 1 3 DNA       objects are DNA sequences given in S-lines
+     ~ D P 0             sequences are paired by proceeding their S-lines with a P-line
+``` 
 
 Next there are three header line types - #, +, and @ - that allow one to specify the number, total size, and maximum size of objects across a file.  These all have the syntax:
 
@@ -208,7 +224,7 @@ line optionally followed by a subtype line and provenance information.  Then ens
 data line of the file type.  And finally, at the end, any relevant reference- and forward-lines.  In a rule:
 
 ```
-    <header> = <version_header> [<subtype_header>] <provenance_step>+
+    <header> = <version_header> [<subtype_header>] <provenance_step>+ <schema_line>*
                    (<size_header>|<group_header>)+ (<reference_header>|<forward_header>)+
 ```
 
@@ -242,7 +258,7 @@ The one special auxiliary line is a group line type, of which there can currentl
 
 The 1-code framework allows one to encode almost any kind of data.  A schema for a primary or secondary file type specifies the type of lines that can be in a data file of that type and their arguments.  The schema applicable to a given file is given in the header with the exception that one can produce an ASCII data file without header or schema and subsequently create the header and associate the schema with the generic 1-code tools.
 
-Schemas are themselves specified in the 1-code format, save that there is no schema for schemas &#x1F609;, the line types are predefined.  A schema always begins with a P-line that has a 3-letter string argumnt specifying the primary file type suffix extension.
+Schemas are themselves specified in the 1-code format (there is a schema for schemas &#x1F609;) with the following 1-code line types.  A schema always begins with a P-line that has a 3-letter string argumnt specifying the primary file type suffix extension.
 
 ```
     <primary_type> = P <string:file_type>
