@@ -279,8 +279,28 @@ enough. By the way, this buffer is overwritten with each new line read of the gi
 typedef int64_t       I64;
 typedef unsigned char U8;
 
-typedef enum { oneINT = 1, oneREAL, oneCHAR, oneSTRING, oneINT_LIST, oneREAL_LIST, oneSTRING_LIST, oneDNA } OneType;
-static char* oneTypeString[] = { 0, "INT", "REAL", "CHAR", "STRING", "INT_LIST", "REAL_LIST", "STRING_LIST", "DNA" };
+typedef enum
+          { oneINT = 1, 
+            oneREAL, 
+            oneCHAR, 
+            oneSTRING, 
+            oneINT_LIST, 
+            oneREAL_LIST, 
+            oneSTRING_LIST, 
+            oneDNA 
+          } OneType;
+          
+static char* oneTypeString[] = 
+          { 0, 
+            "INT", 
+            "REAL", 
+            "CHAR", 
+            "STRING", 
+            "INT_LIST", 
+            "REAL_LIST", 
+            "STRING_LIST", 
+            "DNA" 
+          };
 ```
 Basic data types.  Integers are all as 64-bit, and reals are stored as
 doubles (8 byte).
@@ -293,7 +313,7 @@ typedef union
     I64    len; // for lists: top 8 bits encode excess bytes, low 56 bits encode length
   } OneField;
 ```
-Encoding of a data value.
+Encoding of a data value.  For integer lists, if all the integers are less than 2^x for some x (i.e. they fit in x-bits), then the 1-code library knows this and stores the excess bits, 64-x, in the first byte of the field ```len```.  So be sure to use the macro ```OneLen``` above that masks out this first byte when fetching the length of a list.
 
 ```
 typedef struct
@@ -319,8 +339,8 @@ typedef struct
 Natural data structures for programmatic access to information in the header. Note that all of these should be used read only.
 
 ```
-typedef void OneCodec; // forward declaration of opaque type for compression codecs
-extern  OneCodec *DNAcodec;
+typedef void OneCodec;        // forward declaration of opaque type for compression codecs
+extern  OneCodec *DNAcodec;   // a special codec for DNA
 ```
 OneCodecs are a private package for binary one file
 compression. DNAcodec is a special pre-existing compressor one should
@@ -351,8 +371,10 @@ typedef struct
   {
     // these fields may be set by the user
 
-    BOOL           isCheckString;      // set if want to validate strings char by char - slows down reading
-    I64            codecTrainingSize;  // number of bytes to see before building codec - default 100k - can set before writing
+    BOOL           isCheckString;      // set if want to validate strings char by char
+                                       //    - slows down reading
+    I64            codecTrainingSize;  // number of bytes to see before building codec
+                                       //    - default 100k - can set before writing
 
     // these fields may be read by user - but don't change them!
 
