@@ -3,7 +3,7 @@
 ### Authors:  Gene Myers & Richard Durbin
 ### Last Update: October 19, 2022
 
-The interface is defined in `Onelib.h`.  There are 23 functions and 9 macros, with one primary
+The interface is defined in `Onelib.h`.  There are 21 functions and 9 macros, with one primary
 type `OneFile` which maintains information about the file being read or written, including the current line.
 
 ## Synopsis
@@ -151,22 +151,30 @@ if at the end of the data section.
 
 The content macros immediately below are
 used to access the information of the line most recently read.
+Lists are read lazily, i.e. they remain compressed and are not decoded until
+ one explicitly does so with ```onelist```.  
 
 ```
+void   *oneList (OneFile *vf);                // lazy codec decompression if required
+void   *oneCompressedList (OneFile *vf);      // lazy codec compression if required
+
 #define oneInt(vf,x)        ((vf)->field[x].i)
 #define oneReal(vf,x)       ((vf)->field[x].r)
 #define oneChar(vf,x)       ((vf)->field[x].c)
 #define _LF(vf)             ((vf)->info[(int)(vf)->lineType]->listField)
 #define oneLen(vf)          ((vf)->field[_LF(vf)].len & 0xffffffffffffffll)
-#define oneString(vf)       (char *) ((vf)->info[(int) (vf)->lineType]->buffer)
-#define oneIntList(vf)      (I64 *) ((vf)->info[(int) (vf)->lineType]->buffer)
-#define oneRealList(vf)     (double *) ((vf)->info[(int) (vf)->lineType]->buffer)
+#define oneString(vf)       (char *) oneList(vf)
+#define oneDNAchar(vf)      (char *) oneList(vf)
+#define oneDNA2bit(vf)      (U8 *) oneCompressedList(vf)
+#define oneIntList(vf)      (I64 *) oneList(vf)
+#define oneRealList(vf)     (double *) oneList(vf)
 #define oneNextString(vf,s) (s + strlen(s) + 1)
+
 ```
-Access field information.  The index x of a list object is not required as there is
-only one list per line, stored in ->buffer.
-A "string list" is implicitly supported: get the first string with oneString, and
-subsequent strings sequentially with oneNextString, e.g.:
+The index x of a **list** object is not required as there is
+only one list per line, stored in the line type's private buffer.
+A "string list" is implicitly supported: get the first string with ```oneString```, and
+subsequent strings sequentially with ```oneNextString```, e.g.:
 
 ```
          char *s = oneString(vf);
@@ -179,7 +187,7 @@ subsequent strings sequentially with oneNextString, e.g.:
 ```
 char *oneReadComment (OneFile *vf);
 ```
-Can be called after oneReadLine() to read any optional comment text after the fixed fields.
+Can be called after ```oneReadLine``` to read any optional comment text after the fixed fields.
 Returns NULL if there is no comment.
 
 ### Writing ONE files
@@ -366,6 +374,7 @@ typedef struct OneSchema {} OneSchema ;
 The schema type, all private to the package.  Internally a schema is stored as a linked list of OneSchema objects, with the first holding the (hard-coded) schema for the header and footer, and the remainder each holding the schema definition data for one primary file type.
 
 And, finally, the main OneFile type - this is the primary handle used by the end user.
+
 ```
 typedef struct
   {
@@ -396,9 +405,10 @@ typedef struct
     OneInfo       *info[128];          // all the per-linetype information
  
     // the remainder is private to the package
-    
-  } OneFile;                      //   the footer will be in the concatenated result.
+       
+    } OneFile;                         //   the footer will be in the concatenated result.
 ```
+
 
 # A BIT ABOUT THE FORMAT OF BINARY FILES
 
