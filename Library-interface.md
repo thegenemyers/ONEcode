@@ -149,11 +149,6 @@ char oneReadLine (OneFile *vf);
 Read the next ONE formatted line returning the line type of the line, or 0
 if at the end of the data section.  
 
-The content macros immediately below are
-used to access the information of the line most recently read.
-Lists are read lazily, i.e. they remain compressed and are not decoded until
- one explicitly does so with ```onelist```.  
-
 ```
 void   *oneList (OneFile *vf);                // lazy codec decompression if required
 void   *oneCompressedList (OneFile *vf);      // lazy codec compression if required
@@ -165,12 +160,19 @@ void   *oneCompressedList (OneFile *vf);      // lazy codec compression if requi
 #define oneLen(vf)          ((vf)->field[_LF(vf)].len & 0xffffffffffffffll)
 #define oneString(vf)       (char *) oneList(vf)
 #define oneDNAchar(vf)      (char *) oneList(vf)
-#define oneDNA2bit(vf)      (U8 *) oneCompressedList(vf)
 #define oneIntList(vf)      (I64 *) oneList(vf)
 #define oneRealList(vf)     (double *) oneList(vf)
 #define oneNextString(vf,s) (s + strlen(s) + 1)
 
+#define oneDNA2bit(vf)      (U8 *) oneCompressedList(vf)
 ```
+The content macros immediately above are
+used to access the information of the line most recently read.
+Lists are read lazily, i.e. they remain compressed (when reading a binary 1-code file) and are not decoded until one explicitly does so with ```onelist```.
+The 2-bit compressed form of DNA sequences is useful for certain common numeric tricks (such
+as converting a bar-code into an integer), so ```oneDNA2bit``` always returns the compressed form
+of a DNA list argument which is necessary when reading an ASCII 1-code file.
+
 The index x of a **list** object is not required as there is
 only one list per line, stored in the line type's private buffer.
 A "string list" is implicitly supported: get the first string with ```oneString```, and
