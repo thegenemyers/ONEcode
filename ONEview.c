@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: May 16 12:27 2020 (rd109)
+ * Last edited: Dec  3 06:49 2022 (rd109)
  * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -53,7 +53,7 @@ static IndexList *parseIndexList (char *s)
 static void transferLine (OneFile *vfIn, OneFile *vfOut, size_t *fieldSize)
 { memcpy (vfOut->field, vfIn->field, fieldSize[(int)vfIn->lineType]) ;
   oneWriteLine (vfOut, vfIn->lineType, oneLen(vfIn), oneString(vfIn)) ;
-  char *s = oneReadComment (vfIn) ; if (s) oneWriteComment (vfOut, s) ;
+  char *s = oneReadComment (vfIn) ; if (s) oneWriteComment (vfOut, "%s", s) ;
 }
 
 int main (int argc, char **argv)
@@ -94,7 +94,7 @@ int main (int argc, char **argv)
       { schemaFileName = argv[1] ;
 	argc -= 2 ; argv += 2 ;
       }
-    else if (!strcmp (*argv, "-h") || !strcmp (*argv, "--header"))
+    else if (!strcmp (*argv, "-h") || !strcmp (*argv, "--noHeader"))
       { isNoHeader = true ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-H") || !strcmp (*argv, "--headerOnly"))
       { isHeaderOnly = true ; --argc ; ++argv ; }
@@ -128,11 +128,10 @@ int main (int argc, char **argv)
   OneFile *vfOut = oneFileOpenWriteFrom (outFileName, vfIn, isBinary, 1) ;
   if (!vfOut) die ("failed to open output file %s", outFileName) ;
 
-  if (isHeaderOnly)
-    oneWriteHeader (vfOut) ;
-  else
-    { oneAddProvenance (vfOut, "ONEview", "0.0", command, 0) ;
-      if (!isNoHeader) oneWriteHeader (vfOut) ;
+  if (isNoHeader) vfOut->isNoAsciiHeader = true ; // will have no effect if binary
+
+  if (!isHeaderOnly)
+    { oneAddProvenance (vfOut, "ONEview", "0.0", command) ;
       
       static size_t fieldSize[128] ;
       for (i = 0 ; i < 128 ; ++i)
