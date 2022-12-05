@@ -8,7 +8,7 @@
  *
  * HISTORY:
  * Last edited: Dec  3 06:08 2022 (rd109)
- * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneComment etc.
+ * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
  *
@@ -18,7 +18,7 @@
 #define ONE_DEFINED
 
 #include <stdio.h>    // for FILE etc.
-#include <stdarg.h>   // for formatted writing in oneComment(), oneAddProvenance()
+#include <stdarg.h>   // for formatted writing in oneWriteComment(), oneAddProvenance()
 #include <inttypes.h> // for standard size int types and their PRI print macros
 #include <stdbool.h>  // for standard bool types
 #include <limits.h>   // for INT_MAX etc.

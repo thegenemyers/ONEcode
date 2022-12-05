@@ -1,7 +1,7 @@
 # The One Tools C library interface
 
 ### Authors:  Gene Myers & Richard Durbin
-### Last Update: October 19, 2022
+### Last Update: December 2, 2022
 
 The interface is defined in `Onelib.h`.  There are 21 functions and 9 macros, with one primary
 type `OneFile` which maintains information about the file being read or written, including the current line.
@@ -31,7 +31,6 @@ As a brief synopsis, the following reads a sequence file, prints out some simple
 	 }
 
    oneAddProvenance(out,"revcomp","1.0","revcomp inFile outFile",0);
-   oneWriteHeader(out);
    while (oneReadLine(in))
      if (in->lineType == 'S')
        { totLen += oneLen(in);
@@ -218,24 +217,14 @@ BOOL oneInheritProvenance (OneFile *vf, OneFile *source);
 BOOL oneInheritReference  (OneFile *vf, OneFile *source);
 BOOL oneInheritDeferred   (OneFile *vf, OneFile *source);
 ```
-Add all provenance/reference/deferred entries in source to header of vf.  Must be
-called before call to oneWriteHeader.
+Add all provenance/reference/deferred entries in source to header of vf.
 
 ```
-BOOL oneAddProvenance (OneFile *vf, char *prog, char *version, char *command, char *dateTime);
+BOOL oneAddProvenance (OneFile *vf, char *prog, char *version, char *format, ...);
 BOOL oneAddReference  (OneFile *vf, char *filename, I64 count);
 BOOL oneAddDeferred   (OneFile *vf, char *filename);
 ```
-Append provenance/reference/deferred to header information.  Must be called before
-call to oneWriteHeader.  Current data & time are filled in if 'dateTime' == NULL.
-
-```
-void oneWriteHeader (OneFile *vf);
-```
-Write out the header for file.  For ASCII output, if you want the header to contain
-count information then you must create and fill the relevant OneCounts objects before
-calling this. For binary output, the counts will be accumulated and output in a
-footer upon oneFileClose().
+Append provenance/reference/deferred to header information.  oneAddProvenance uses the current date and time.
 
 ```
 void oneWriteLine (OneFile *vf, char lineType, I64 listLen, void *listBuf);
@@ -247,10 +236,10 @@ For lists, give the length in the listLen argument, and either place the list da
 own buffer and give it as listBuf, or put it in the line's buffer and set listBuf == NULL.
 
 ```
-void oneWriteComment (OneFile *vf, char *comment);
+void oneWriteComment (OneFile *vf, char *format, ...);
 ```
 Adds a comment to the current line. Need to use this not fprintf() so as to keep the
-index correct in binary mode.
+index correct in binary mode.  Cannot have internal new-lines ('\n').
 
 ### Closing files (for both read and write)
 
