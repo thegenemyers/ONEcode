@@ -86,11 +86,10 @@ any subsequent list length items determine when the encoding of information on a
 
 The first header line must always be a 1-line confirming the primary file type and specifying
 the major and minor version numbers separated by whitespace.
-This can optionally be followed immediately by a file subtype line of type ```2``` that gives the
+This can optionally be followed immediately by a file subtype line, a 2-line, that gives the
 secondary file type.
 One or more provenance lines (!-lines) then inform one about how the
-particular file came to be.  
-Additional header lines give information about the number of items
+particular file came to be.  Additional header lines give information about the number of items
 in the file (#-lines), the maximum length of lists (@-lines), and the total number of items in
 a given list class (+-lines).  The data segment in this simple example then consists of pairs
 of reads encoded by P-lines indicating the beginning of a pair, followed by two S-lines
@@ -112,7 +111,7 @@ The one exemption is potentially an ASCII file produced by an external program, 
 ``` 
 
 A schema file consists of predefined 'P', 'S', 'O', and 'D' lines.  A single, leading P-line specifies the primary type file extension and may be followed optionally be an S-line giving the
-secondary type file extension.  The O-line specifies that S-lines in the data file are the objects described in the file and they have a single DNA string as an argument.  The D-line specifies that P-lines are auxiliary lines giving additional information, in this case, the line has no arguments.
+secondary type file extension.  The O-line specifies that S-lines in the data file are the objects described in the file and they have a single DNA string as an argument.  The D-line specifies that P-lines are auxiliary lines giving additional information, in this example, the line has no arguments.
 
 
 ## 1. 1-Code Headers
@@ -140,7 +139,7 @@ the synatx:
 ```
 where the initial ```1``` indicates that this is a "1-code" file (as well as this being line 1
 &#x1F609;)
-and ```<file_type>``` is one of the five 3-letter file suffixes given at the start.
+and ```<file_type>``` is a 3-letter file suffix.
 
 The initial header line can be followed by an optional subtype line
 
@@ -149,7 +148,7 @@ The initial header line can be followed by an optional subtype line
 ```
 where now file type is one of the suffixes above for a secondary file type.
 
-How a file was produced, or its provenance, we believe is very important and users are encouraged to include a sequence of of provenance or !-lines that each record a processing step that
+How a file was produced, or its provenance, we believe is very important and users are encouraged to include a sequence of provenance or !-lines that each record a processing step that
 was involved in producing the current file.  Each line contains four strings giving (a) the
 program name, (b) the version of that program as a string, (c) the command line that was executed, and (d) the date and time it was run.
 
@@ -206,9 +205,10 @@ in another file. This has the syntax:
 ```
 All the objects (all of the same type) in the specified file are available and
 and ```nx``` indicates the number of these items in the file (hence
-the range of reference indices is ```[0,nx)```).  For example a hypothetical alignment file would refers to sequence objects in another file of type sequence.
+the range of reference indices is ```[1,nx)```).  For example a hypothetical alignment file would refer to sequence objects in another file of type sequence.
 
-A related concept is to refer to another file upon which the objects in the current file depend.
+A related concept is to specify another file whose objects depend on the objects
+in the current file.
 We denote these with a '>'-line that has the opposite direction to the '<' of the reference line
 above.
 
@@ -219,12 +219,12 @@ In this case there is no need to indicate the number of objects in the file, sin
 file will not refer to them.
 
 
-In summary, every (complete) 1-code data file begins with a header.  Every header starts with a version
+In summary, every (complete) 1-code data file begins with a header.  Every header starts with a primary type
 line optionally followed by a subtype line and provenance information.  Then ensue a number of size lines for every relevant
 data line of the file type.  And finally, at the end, any relevant reference- and forward-lines.  In a rule:
 
 ```
-    <header> = <version_header> [<subtype_header>] <provenance_step>+ <schema_line>*
+    <header> = <primary_type_header> [<subtype_header>] <provenance_step>+ <schema_line>*
                    (<size_header>|<group_header>)+ (<reference_header>|<forward_header>)+
 ```
 
@@ -233,14 +233,13 @@ data line of the file type.  And finally, at the end, any relevant reference- an
 Every data line begins with a type designated by a single alphabetic letter.
 This is then followed by a number of arguments as defined by the schema for the file.
 All tokens are separated by a single space character, and lists are proceeded by an
-integer giving the length of the list.  After the last argument, any text to the end of the line
-is considered a comment.
+integer giving the length of the list.  After the last argument, any text to the end of the line is considered a comment.
 
 ```
     <data>      = <data_line>*
       <data_line> = <char:1-code> <datum>*
 ```
-1-code supports arguments of the following types: CHAR, INT, REAL, STRING, INT\_LIST, REAL\_LIST, STRING\_LIST, and DNA.  One does not need to worry about the word-size of integers or reals, they both accommodate the machine maximum of 64-bits but internally are encoded more efficiently when possible.  Note that a STRING is just a CHAR\_LIST, and DNA represents a STRING over the letters acgt where case is ignored.  DNA strings are handled internally in a more efficient way then general strings, hence the distinction.  Finally, note that a STRING\_LIST is subtle in that it is technically a list of lists, e.g. ```3 1 a 5 small 7 example```, requiring clarification for the meaning of any relevant size lines in the header.
+1-code supports arguments of the following types: CHAR, INT, REAL, STRING, DMA, INT\_LIST, REAL\_LIST, and STRING\_LIST.  One does not need to worry about the word-size of integers or reals, they both accommodate the machine maximum of 64-bits but internally are encoded more efficiently when possible.  Note that a STRING is just a CHAR\_LIST, and DNA represents a STRING over the letters acgt where case is ignored.  DNA strings are handled internally in a more efficient way then general strings, hence the distinction.  Finally, note that a STRING\_LIST is subtle in that it is technically a list of lists, e.g. ```3 1 a 5 small 7 example```, requiring clarification for the meaning of any relevant size lines in the header.
 
 ```
     <datum>       = <scalar_data> | <list_data>
