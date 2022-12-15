@@ -5,7 +5,7 @@
 
 This document describes generic command line tools for interacting with One-Code files.
 
-#### <code>1. ONEstat [-Hu] [-o \<name>] [-t <3-code>] \<input:ONE-file></code>
+#### <code>1. ONEstat [-Hu] [-o \<name>] [-t \<type suffix>] \<input:ONE-file></code>**
 
 ONEstat provides information about a 1-code data file.  Without arguments it validates an ASCII file, including reporting any missing header information, and states how many objects, groups, and lines it contains.  Details of how many lines of each type are present are available in the count '@' header lines output by the -H option.
 
@@ -17,7 +17,7 @@ The -o option redirects the output to the named file. The default is stdout.
 
 The -t option specifies the file type, and is required if the inspected file is an ascii file without a header, but is not needed for a binary file or an ASCII file with a proper header.
 
-#### <code>2. ONEview [-bhH] [-o \<filename>] [-t <3-code>] [-i \<ranges>] [-g \<ranges>] \<input:ONE-file></code>
+#### <code>2. ONEview [-bhH] [-o \<filename>] [-t \<type suffix>] [-i \<ranges>] [-g \<ranges>] \<input:ONE-file></code>
 	
 ONEview is the standard utility to extract data from 1-code files and convert between ASCII and binary forms of the format.
 

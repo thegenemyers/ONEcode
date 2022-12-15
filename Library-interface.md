@@ -81,8 +81,8 @@ for reading and writing.  A schema file is itself a One-code file, consisting of
 a set of objects, one per primary file type.  Valid lines in this file are:
 
 ```
-   P <primary file type>   // a string of length 3
-   S <secondary file type> // a string of length 3 - any number of these
+   P <primary file type>   // a short string, generally lower-case
+   S <secondary file type> // a short string - any number of these
    G <char> <field_list>   // definition of group defining line - optional, at most one per P line
    O <char> <field_list>   // definition of object defining line - once and only once per P line
    D <char> <field_list>   // definition of standard line

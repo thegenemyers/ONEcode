@@ -10,7 +10,7 @@ are themselves 1-code data files but with predefined line types and no header.
 
 Each 1-code data file is a container for objects of a single *type*.  There are *primary* types and *secondary* types which are specializations of a primary type for
 particular applications, requiring particular properties or line types to be present by convention (that is not checked or enforced by the 1-code framework).
-Every primary and secondary file type is assigned a 3-letter lower case string, that must be used as a filename's suffix, e.g. dataset.seq or bigdata.kmr.  For example, a primary data type could be  sequence, with secondary types k-mer, illumina read-pair, pacbio long read, and contig that are specializations of sequence to particular types of sequences.
+Every primary and secondary file type is assigned a short string, that must be used as a filename's suffix, e.g. "seq" as in dataset.seq or "kmer" as in bigdata.kmer.  For example, a primary data type could be sequence, with secondary types k-mer, illumina read-pair, pacbio long read, or contig that are specializations of sequence to particular types of sequences.
 
 We describe here the ASCII version of a data file.  There is always a binary version encoding the same information that is much more compact and efficient that can be produced either by converting an ASCII version with ONEview, or produced directly with our C support library.  The binary versions are distinguished by having the same suffix as the ASCII version, but with a "1" prepended, e.g. dataset.1seq.
 
@@ -139,7 +139,7 @@ the synatx:
 ```
 where the initial ```1``` indicates that this is a "1-code" file (as well as this being line 1
 &#x1F609;)
-and ```<file_type>``` is a 3-letter file suffix.
+and ```<file_type>``` gives the file suffix string.
 
 The initial header line can be followed by an optional subtype line
 
@@ -257,7 +257,7 @@ The one special auxiliary line is a group line type, of which there can currentl
 
 The 1-code framework allows one to encode almost any kind of data.  A schema for a primary or secondary file type specifies the type of lines that can be in a data file of that type and their arguments.  The schema applicable to a given file is given in the header with the exception that one can produce an ASCII data file without header or schema and subsequently create the header and associate the schema with the generic 1-code tools.
 
-Schemas are themselves specified in the 1-code format (there is a schema for schemas &#x1F609;) with the following 1-code line types.  A schema always begins with a P-line that has a 3-letter string argumnt specifying the primary file type suffix extension.
+Schemas are themselves specified in the 1-code format (there is a schema for schemas &#x1F609;) with the following 1-code line types.  A schema always begins with a P-line that has a string argumnt specifying the primary file type suffix extension.
 
 ```
     <primary_type> = P <string:file_type>
