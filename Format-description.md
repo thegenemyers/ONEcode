@@ -26,7 +26,7 @@ terminator (e.g. xxx0) constructions are not permitted.
 should be specified in the header of a file so that memory allocation can be performed
 once at the start by the reader if desired.
 
-4.	There should be a VGP tool that translates the ASCII format
+4.	There should be a generic tool that translates the ASCII format
 to a terse, indexable binary form and another that inverts this conversion, as well as a code-level interface to the binary encoding.
 
 5.	The ASCII form should not be overly verbose. It is not primarily for human consumption, but must be easily interpretable by a human being when and if they need to look at the data.
