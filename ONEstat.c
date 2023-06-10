@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University, 2019
  *
  * HISTORY:
- * Last edited: Dec  3 06:42 2022 (rd109)
+ * Last edited: Jun 10 08:20 2023 (rd109)
  *   * Dec 27 09:20 2019 (gene): style edits
  *   * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *
@@ -97,7 +97,7 @@ int main (int argc, char **argv)
     }
 
   if (checkText)
-    oneFileCheckSchema (vf, checkText) ;
+    oneFileCheckSchemaText (vf, checkText) ;
 
   vf->isCheckString = true ;
 
