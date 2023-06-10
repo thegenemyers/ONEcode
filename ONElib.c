@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: May 13 11:38 2023 (rd109)
+ * Last edited: Jun 10 08:23 2023 (rd109)
  * * Dec 20 21:29 2022 (rd109): changed DNA compression to little-endian: natural on Intel, Apple
  * * Apr 23 00:31 2020 (rd109): global rename of VGP to ONE, Vgp to One, vgp to one
  * * Apr 20 11:27 2020 (rd109): added VgpSchema to make schema dynamic
@@ -16,6 +16,10 @@
  * * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *
  ****************************************************************************************/
+
+#ifdef LINUX
+#define _GNU_SOURCE  // needed for vasprintf() on Linux
+#endif
 
 #include <sys/errno.h>
 #include <sys/types.h>
@@ -252,7 +256,7 @@ static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
 
 static void oneFileDestroy (OneFile *vf) ; // need a forward declaration here
 
-OneSchema *oneSchemaCreateFromFile (char *filename)
+OneSchema *oneSchemaCreateFromFile (const char *filename)
 {
   FILE *fs = fopen (filename, "r") ;
   if (!fs) return 0 ;
@@ -363,7 +367,7 @@ static char *schemaFixNewlines (const char *text)
   return newText ;
 }
   
-OneSchema *oneSchemaCreateFromText (char *text) // write to temp file and call CreateFromFile()
+OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and call CreateFromFile()
 {
   static char template[64] ;
   sprintf (template, "/tmp/OneTextSchema-%d.def", getpid()) ;
@@ -421,7 +425,7 @@ static inline void setCodecBuffer (OneInfo *vi)
   vi->buffer  = new (vi->bufSize, void);
 }
 
-static OneFile *oneFileCreate (OneSchema **vsp, char *type)
+static OneFile *oneFileCreate (OneSchema **vsp, const char *type)
 { // searches through the linked list of vs to find type, either as primary or a secondary
   // if found fills and returns vf, else returns 0
   
@@ -1147,7 +1151,7 @@ void *_oneCompressedList (OneFile *vf)
  *
  **********************************************************************************/
 
-OneFile *oneFileOpenRead (const char *path, OneSchema *vs, char *fileType, int nthreads)
+OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType, int nthreads)
 {
   OneFile   *vf ;
   off_t      startOff = 0, footOff;
@@ -1252,8 +1256,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, char *fileType, int n
           break;
 
         case '2':
-	  if (oneLen(vf) != 3)
-	    parseError (vf, "secondary subType must have length 3") ;
 	  if (isDynamic)
             { char *s = oneString(vf);
               vf->subType = new (oneLen(vf)+1, char);
@@ -1577,7 +1579,7 @@ I64 oneGotoGroup (OneFile *vf, I64 i)
  *
  **********************************************************************************/
 
-OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, char *fileType,
+OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileType,
                               bool isBinary, int nthreads)
 { OneFile   *vf ;
   FILE      *f ;
@@ -1697,7 +1699,7 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   return vf ;
 }
 
-bool oneFileCheckSchema (OneFile *vf, char *textSchema)
+bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema)
 {
   char      *fixedText = schemaFixNewlines (textSchema) ;
   OneSchema *vs = oneSchemaCreateFromText (fixedText) ;
