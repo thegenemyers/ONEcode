@@ -4,3 +4,4 @@ ONEstat
 ONEview
 utils.o
 .DS_Store
+*.so
