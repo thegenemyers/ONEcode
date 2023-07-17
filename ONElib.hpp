@@ -16,7 +16,7 @@
 #include <stdexcept>
 using namespace std ;
 
-namespace C_1F {
+namespace C_1F {	// private namespace for C interface
 extern "C" { 
 #include "ONElib.h"
 }
