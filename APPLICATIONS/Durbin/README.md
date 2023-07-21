@@ -2,7 +2,7 @@
 
 This directory contains core DNA sequence utilities that interconvert
 between ONEcode and fasta and other formats, and summarise the
-properties of a :
+properties of a sequence file:
 
 - **seqconvert** to convert between DNA file types.  This also will
   homopolymer compress (-H "hoco"), and if writing to a 1seq file
@@ -16,7 +16,15 @@ properties of a :
   see below), and a custom binary sequence file format (now deprecated
   with 1seq preferred). 
 
-For each program, running it without any arguments gives usage information.
+For each program, running it without any arguments gives usage
+information.
+
+Note that this directory contains **copies** of ../../ONElib.[ch]
+rather than directly linking against them.  It is therefore
+standalone.  This is my standard pattern for using ONElib: I copy a
+working version of ONElib.[ch] into the new project to ensure there
+are no dependencies and it stays stable.  I can update the copies to
+acquire new features whenever I want.
 
 ## Building
 ```
