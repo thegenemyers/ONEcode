@@ -40,7 +40,17 @@ class ONEfile
   C_1F::OneFile *vf ;
   
  public:
-  ONEfile (const string &path, const string &mode, const ONEschema &schema, const string &type, int nthreads)
+  ONEfile (const string &path) // just to open an existing file for reading with one thread
+    { vf = NULL ;
+      vf = C_1F::oneFileOpenRead (path.c_str(), 0, 0, 1) ;
+      if (vf == NULL) { throw runtime_error("failed to open ONEfile") ; } 
+    }
+  ONEfile (const string &path, int nthreads) // open an existing file for reading with nthreads
+    { vf = NULL ;
+      vf = C_1F::oneFileOpenRead (path.c_str(), 0, 0, nthreads) ;
+      if (vf == NULL) { throw runtime_error("failed to open ONEfile") ; } 
+    }
+  ONEfile (const string &path, const string &mode, const ONEschema &schema, const string &type, int nthreads) // full version
     { vf = NULL ;
       const char* tc = (type.size() > 0) ? type.c_str() : 0 ;
       if (mode[0] == 'r')
