@@ -5,13 +5,15 @@ DEST_DIR = ~/bin
 CFLAGS= -O3 -Wall -Wextra -Wno-unused-result -fno-strict-aliasing -DNDEBUG # NDEBUG drops asserts
 #CFLAGS= -g -Wall -Wextra -Wno-unused-result -fno-strict-aliasing  # for debugging
 
+CCPP=g++
+
 LIB = libONE.a
 PROGS = ONEstat ONEview
 
 all: $(LIB) $(PROGS)
 
 clean:
-	$(RM) *.o ONEstat ONEview $(LIB) ZZ*
+	$(RM) *.o ONEstat ONEview $(LIB) ZZ* ONEcpptest.cpp ONEcpptest
 	$(RM) -r *.dSYM
 
 install:
@@ -38,5 +40,17 @@ ONEstat: ONEstat.c utils.o $(LIB)
 
 ONEview: ONEview.c utils.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^
+
+### test
+
+ONEcpptest.cpp: ONElib.hpp
+	\ln -s ONElib.hpp $@
+
+ONEcpptest: ONEcpptest.cpp ONElib.o
+	$(CCPP) -D TEST_HEADER -o $@ $^
+
+test: ONEview ONEcpptest
+	./ONEview APPLICATIONS/Durbin/small.seq
+	./ONEcpptest APPLICATIONS/Durbin/small.1seq
 
 ### end of file
