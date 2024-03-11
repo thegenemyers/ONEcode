@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Mar 11 03:11 2024 (rd109)
+ * Last edited: Mar 11 05:21 2024 (rd109)
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
  * * Mar 11 02:48 2024 (rd109): added oneFileWriteSchema() to write schema files for bare text parsing
  * * Mar 10 07:16 2024 (rd109): changed oneOpenFileRead semantics to prioritize file schema
@@ -320,7 +320,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
 
   // next reuse the temp file to load the schema for reading schemas
   if (fseek (vf->f, 0, SEEK_SET)) die ("ONE schema failure: cannot rewind tmp file") ;
-  fprintf (vf->f, "P 6 schema                   this is the primary file type for schemas\n") ;
+  fprintf (vf->f, "P 3 def                      this is the primary file type for schemas\n") ;
   fprintf (vf->f, "O P 1 6 STRING               primary type name\n") ;
   fprintf (vf->f, "D S 1 6 STRING               secondary type name\n") ;
   fprintf (vf->f, "D G 2 4 CHAR 11 STRING_LIST  define linetype for groupType\n") ;
@@ -336,7 +336,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   oneFileDestroy (vf) ;   // this will also effectively remove the temp file on closing
 
   // finally read the schema itself
-  if (!(vf = oneFileOpenRead (filename, vs0, "schema", 1)))
+  if (!(vf = oneFileOpenRead (filename, vs0, "def", 1)))
     return 0 ;
   vs = vs0 ; // set back to vs0, so next filetype spec will replace vsDef
   vs->nxt = 0 ;
@@ -368,7 +368,13 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
 
   errno = 0 ;
   FILE *f = fopen (template, "w") ;
+  if (!f) die ("failed to open temporary file %s for writing schema to", template) ;
   char *fixedText = schemaFixNewlines (text) ;
+  while (*fixedText && *fixedText != 'P')
+    { while (*fixedText && *fixedText != '\n') ++fixedText ;
+      if (*fixedText == '\n') ++fixedText ;
+    }
+  if (!*fixedText) die ("no P line in schema text") ;
   fprintf (f, "%s\n", fixedText) ;
   free (fixedText) ;
   fclose (f) ;
