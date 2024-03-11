@@ -7,13 +7,16 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Mar  6 22:24 2024 (rd109)
+ * Last edited: Mar 11 03:11 2024 (rd109)
+ * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
+ * * Mar 11 02:48 2024 (rd109): added oneFileWriteSchema() to write schema files for bare text parsing
+ * * Mar 10 07:16 2024 (rd109): changed oneOpenFileRead semantics to prioritize file schema
  * * Dec 20 21:29 2022 (rd109): changed DNA compression to little-endian: natural on Intel, Apple
  * * Apr 23 00:31 2020 (rd109): global rename of VGP to ONE, Vgp to One, vgp to one
  * * Apr 20 11:27 2020 (rd109): added VgpSchema to make schema dynamic
  * * Dec 27 09:46 2019 (gene): style edits + compactify code
  * * Jul  8 04:28 2019 (rd109): refactored to use info[]
- * * Created: Thu Feb 21 22:40:28 2019 (rd109)
+ * * Created: Thu Feb 21 22:40:28 2019 (rd09)
  *
  ****************************************************************************************/
 
@@ -108,16 +111,6 @@ static OneInfo *infoDeepCopy (OneInfo *vi0)
   return vi ;
 }
 
-static bool infoCheckFields (OneInfo *vi, OneFile *vf)
-{ // check field types against the STRING_LIST in vf
-  char *s = oneString(vf) ;
-  int i ;
-  if (vi->nField != oneLen(vf)) return false ;
-  for (i = 0 ; i < vi->nField ; ++i, s = oneNextString(vf,s))
-    if (strcmp (oneTypeString[vi->fieldType[i]], s)) return false ;
-  return true ;
-}
-
 static void infoDestroy (OneInfo *vi)
 { if (vi->buffer && ! vi->isUserBuf) free (vi->buffer) ;
   if (vi->listCodec) vcDestroy (vi->listCodec) ;
@@ -134,13 +127,14 @@ static int listEltSize[9] = { 0, 0, 0, 0, 1, sizeof(I64), sizeof(double), 1, 1 }
 
 static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, char type)
 {
-  // use during the bootstrap, while parsing .def files, and while parsing ~ lines in other files
+  // use during the bootstrap, while parsing schema files, and while parsing ~ lines in other files
   
   if (vs->info[(int) t])
     die ("duplicate schema specification for linetype %c in filetype %s", t, vs->primary) ;
   if (isalpha(t) && type == 'G')
     { if (vs->groupType) die ("second group type in schema for filetype %s", vs->primary) ;
       vs->groupType = t ;
+      if (n < 1 || a[0] != oneINT) die ("first argument of group type %c must be INT", t) ;
     }
   else if (isalpha(t) && type == 'O')
     { if (vs->objectType) die ("second object type in schema for filetype %s", vs->primary) ;
@@ -169,11 +163,11 @@ static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, ch
 
   if (t >= 'A' && t <= 'Z') vi->binaryTypePack = ((t-'A') << 1) | (char) 0x80 ;
   else if (t >= 'a' && t <= 'z') vi->binaryTypePack = ((26+t-'a') << 1) | (char) 0x80 ;
-  else if (t == ';') vi->binaryTypePack = (52 << 2) | (char) 0x80 ;
-  else if (t == '&') vi->binaryTypePack = (53 << 2) | (char) 0x80 ;
-  else if (t == '*') vi->binaryTypePack = (54 << 2) | (char) 0x80 ;
-  else if (t == '/') vi->binaryTypePack = (55 << 2) | (char) 0x80 ;
-  else if (t == '.') vi->binaryTypePack = (56 << 2) | (char) 0x80 ;
+  else if (t == ';') vi->binaryTypePack = (52 << 1) | (char) 0x80 ;
+  else if (t == '&') vi->binaryTypePack = (53 << 1) | (char) 0x80 ;
+  else if (t == '*') vi->binaryTypePack = (54 << 1) | (char) 0x80 ;
+  else if (t == '/') vi->binaryTypePack = (55 << 1) | (char) 0x80 ;
+  else if (t == '.') vi->binaryTypePack = (56 << 1) | (char) 0x80 ;
 
   vs->info[(int)t] = vi ;
 }
@@ -267,7 +261,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   OneFile *vf = new0 (1, OneFile) ;      // shell object to support bootstrap
   // bootstrap specification of linetypes to read schemas
   { OneInfo *vi ;
-    vi = vf->info['P'] = infoCreate (1) ;  // to define the schema for parsing a .def file
+    vi = vf->info['P'] = infoCreate (1) ;  // to define the schema for parsing a .schema file
     vi->fieldType[0] = oneSTRING ; vi->listEltSize = 1 ; vi->listField = 0 ;
     vi = vf->info['O'] = infoCreate (2) ;  // object type specification
     vi->fieldType[0] = oneCHAR ;
@@ -326,7 +320,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
 
   // next reuse the temp file to load the schema for reading schemas
   if (fseek (vf->f, 0, SEEK_SET)) die ("ONE schema failure: cannot rewind tmp file") ;
-  fprintf (vf->f, "P 3 def                      this is the primary file type for schemas\n") ;
+  fprintf (vf->f, "P 6 schema                   this is the primary file type for schemas\n") ;
   fprintf (vf->f, "O P 1 6 STRING               primary type name\n") ;
   fprintf (vf->f, "D S 1 6 STRING               secondary type name\n") ;
   fprintf (vf->f, "D G 2 4 CHAR 11 STRING_LIST  define linetype for groupType\n") ;
@@ -342,7 +336,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   oneFileDestroy (vf) ;   // this will also effectively remove the temp file on closing
 
   // finally read the schema itself
-  if (!(vf = oneFileOpenRead (filename, vs0, "def", 1)))
+  if (!(vf = oneFileOpenRead (filename, vs0, "schema", 1)))
     return 0 ;
   vs = vs0 ; // set back to vs0, so next filetype spec will replace vsDef
   vs->nxt = 0 ;
@@ -370,7 +364,7 @@ static char *schemaFixNewlines (const char *text)
 OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and call CreateFromFile()
 {
   static char template[64] ;
-  sprintf (template, "/tmp/OneTextSchema-%d.def", getpid()) ;
+  sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
 
   errno = 0 ;
   FILE *f = fopen (template, "w") ;
@@ -391,14 +385,16 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
 
 static OneSchema *oneSchemaCreateDynamic (char *fileType, char *subType)
 { // this is clean, but it seems a bit wasteful to create a temp file
-  char text[32] ;
+  char *text ;
   assert (fileType && strlen(fileType) > 0) ;
   assert (!subType || strlen(subType) > 0) ;
+  text = new (32 + strlen(fileType) + (subType?strlen(subType):0), char) ;
   if (subType)
     sprintf (text, "P %ld %s\nS %ld %s\n", strlen(fileType),fileType, strlen(subType), subType) ;
   else
     sprintf (text, "P %ld %s\n", strlen(fileType), fileType) ;
   OneSchema *vs = oneSchemaCreateFromText (text) ;
+  free (text) ;
   return vs ;
 }
 
@@ -415,6 +411,54 @@ void oneSchemaDestroy (OneSchema *vs)
       free (vs) ;
       vs = t ;
     }
+}
+
+static void writeInfoSpec (FILE *f, OneFile *vf, char ci) // also used in writeHeader()
+{
+  int i ;
+  OneInfo *vi = vf->info[(int) ci] ;
+
+  if (f == vf->f) fprintf (f, "\n~ ") ; // writing the schema into the file header
+  else fprintf (f, "\n") ;              // just writing a schema file
+
+  if (ci == vf->groupType)
+    fprintf (f, "G %c %d", ci, vi->nField) ;
+  else if (ci == vf->objectType)
+    fprintf (f, "O %c %d", ci, vi->nField) ;
+  else
+    fprintf (f, "D %c %d", ci, vi->nField) ;
+  for (i = 0 ; i < vi->nField ; ++i)
+    fprintf (f, " %d %s",
+	     (int)strlen(oneTypeString[vi->fieldType[i]]), oneTypeString[vi->fieldType[i]]) ;
+  if (vi->comment)
+    oneWriteComment (vf, "%s", vi->comment) ;
+}
+
+void oneFileWriteSchema (OneFile *vf, char *filename)
+{
+  int i ;
+  FILE *f ;
+
+  if (!vf) return ;
+  if (!strcmp (filename, "-"))
+    f = stdout ;
+  else if (!(f= fopen (filename, "w")))
+    { fprintf (stderr, "failed to open %s to write schema into\n", filename) ; return ; }
+
+  fprintf (f, "P %d %s", (int)strlen(vf->fileType), vf->fileType) ;
+  if (vf->subType) fprintf (f, "\nS %d %s", (int)strlen(vf->subType), vf->subType) ;
+
+  if (vf->groupType) writeInfoSpec (f, vf, vf->groupType) ;
+  for (i = 'a' ; i <= 'z' ; ++i)
+    if (vf->info[i] && i != vf->objectType && i != vf->groupType)
+      writeInfoSpec (f, vf, i) ;
+  if (vf->objectType) writeInfoSpec (f, vf, vf->objectType) ;
+  for (i = 'A' ; i <= 'Z' ; ++i)
+    if (vf->info[i] && i != vf->objectType && i != vf->groupType)
+      writeInfoSpec (f, vf, i) ;
+  
+  fprintf (f, "\n") ;
+  fclose (f) ;
 }
 
 /*************************************/
@@ -742,9 +786,9 @@ static inline void updateGroupCount(OneFile *vf, bool isGroupLine)
   OneInfo   *li;
   OneCounts *ci;
 
-  for (i = 'A'; i <= 'Z' ; i++)
+  for (i = 'A'; i <= 'z' ; i++)
     { li = vf->info[i];
-      if (li != NULL)
+      if (i != vf->groupType && li != NULL)
         { ci = &(li->accum);
           if (vf->inGroup)
             { if (ci->groupCount < ci->count - li->gCount)
@@ -1154,19 +1198,19 @@ void *_oneCompressedList (OneFile *vf)
  *
  **********************************************************************************/
 
-OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType, int nthreads)
+OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileType, int nthreads)
 {
   OneFile   *vf ;
   off_t      startOff = 0, footOff;
-  OneSchema *vs0 = vs ;
-  bool       isDynamic = false ; // if we are making the schema from the header
+  OneSchema *vsFile ;                // will be used to build schema from file
+  OneSchema *vs0 ;                   // needed when making slave thread entries
+  bool       isBareFile = false ;
 
   assert (fileType == NULL || strlen(fileType) > 0) ;
 
   // first open the file, read first header line if it exists, and create the OneFile object
   
   { FILE *f ;
-    char *name ;
     int   curLine = 0 ;
     U8    c ;
 
@@ -1178,9 +1222,9 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 	  return NULL;
       }
     
-#define OPEN_ERROR1(x) { fprintf (stderr,"ONE file error %s: %s\n", path, x) ; \
+#define OPEN_ERROR1(x) { fprintf (stderr,"ONEcode file open error %s: %s\n", path, x) ; \
       fclose(f) ; return NULL; }
-#define OPEN_ERROR3(x,y,z) { fprintf (stderr,"ONE file error %s: ", path) ;	\
+#define OPEN_ERROR3(x,y,z) { fprintf (stderr,"ONEcode file open error %s: ", path) ;	\
       fprintf (stderr,x,y,z) ; fprintf (stderr, "\n") ; fclose(f) ; return NULL ; }
     
     c = getc(f);
@@ -1189,13 +1233,14 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 
     if (c == '1')
       { int  major, minor, slen;
+	char *primaryName ;
       
 	if (fscanf (f, " %d", &slen) != 1)
 	  OPEN_ERROR1("line 1: failed to read type name length") ;
 	if (slen == 0)
 	  OPEN_ERROR1("line 1: type name is empty string") ;
-        name = new0 (slen+1, char);
-	if (fscanf (f, " %s %d %d", name, &major, &minor) != 3)
+        primaryName = new0 (slen+1, char);
+	if (fscanf (f, " %s %d %d", primaryName, &major, &minor) != 3)
 	  OPEN_ERROR1("line 1: failed to read remainder of line") ;
 	while (getc(f) != '\n')
 	  if (feof(f))
@@ -1205,30 +1250,20 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 	  OPEN_ERROR3("major version file %d > code %d", major, MAJOR) ;
 	if (minor > MINOR)
 	  OPEN_ERROR3("minor version file %d > code %d", minor, MINOR) ;
+	vs0 = vsFile = oneSchemaCreateDynamic (primaryName, 0) ; // create a shell schema
+	vf = oneFileCreate (&vsFile, primaryName)  ;
+	free (primaryName) ;
       }
     else
       { ungetc (c, f) ;
-	if (!fileType)
-	  OPEN_ERROR1("attempting to open a file without the type being defined") ;
-        name = new0 (strlen(fileType)+1, char);
-	strcpy (name, fileType) ;
+	isBareFile = true ;
+	if (!fileType || !vsArg)
+	  OPEN_ERROR1("attempting to open a bare oneFile without giving the type and/or schema") ;
+	vs0 = vsArg ;
+	vf = oneFileCreate (&vsArg, fileType) ;
+	if (!vf)
+	  OPEN_ERROR1("failed to find given type in given schema") ;
       }
-
-    if (!vs) // create a shell schema, which can be filled from the header
-      { vs0 = vs = oneSchemaCreateDynamic (name, 0) ;
-	isDynamic = true ;
-      }
-
-    vf = oneFileCreate (&vs, name) ;
-    if (!vf)
-      OPEN_ERROR1("failed to create OneFile object") ;
-    if (fileType && strcmp (fileType, vf->fileType) &&
-	(!vf->subType || strcmp (fileType, vf->subType)))
-      { oneFileDestroy (vf) ;
-	OPEN_ERROR3("fileType mismatch file %s != requested %s", vf->fileType, fileType) ;
-      }
-
-    free(name);
     
     vf->f = f;
     vf->line = curLine;
@@ -1250,6 +1285,15 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 
       if (isalpha(peek) || peek == '\n')  // '\n' to check for end of binary file, i.e. empty file
         break;    // loop exit at standard data line
+
+      if (isBareFile) // can't have any special header lines
+	{ fprintf (stderr,
+		   "ONEcode file open error %s: if header exists it must begin with '1' line\n",
+		   path) ;
+	  fclose (vf->f) ;
+	  oneFileDestroy (vf) ;
+	  return 0 ;
+	}
       
       oneReadLine(vf);  // can't fail because we checked file eof already
 
@@ -1260,65 +1304,41 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
           break;
 
         case '2':
-	  if (isDynamic)
-            { char *s = oneString(vf);
-              vf->subType = new (oneLen(vf)+1, char);
-	      strcpy (vf->subType, s) ;
-            }
-	  else
-	    { char *sub = oneString(vf) ;
-	      int i ;
-	      for (i = 0 ; i < vs->nSecondary ; ++i)
-		if (!strcmp (sub, vs->secondary[i])) break ;
-	      if (i < vs->nSecondary)
-                { vf->subType = new (strlen(sub)+1, char);
-		  strcpy (vf->subType, sub) ;
-                }
-	      else
-		parseError (vf, "subtype %s not compatible with primary type %s",
-			    sub, vf->fileType);
-	    }
+	  vf->subType = strdup (oneString(vf)) ;
 	  break;
 
 	case '.': // blank line for spacing and header text
 	  { char *text = oneReadComment (vf) ;
 	    if (text)
-	      { OneHeaderText **t = &vf->headerText ;
-		while (*t) t = &((*t)->nxt) ;
-		*t = new0 (1, OneHeaderText) ;
-		(*t)->text = strdup (text) ;
+	      {	OneHeaderText *t ;
+		if (vf->headerText)
+		  { t = vf->headerText ; while (t->nxt) t = t->nxt ;
+		    t->nxt = new0 (1, OneHeaderText) ; t = t->nxt ;
+		  }
+		else
+		  t = vf->headerText = new0 (1, OneHeaderText) ;
+		t->text = strdup (text) ;
 	      }
 	    break ;
 	  }
 
 	case '~': // schema definition line
 	  { char t = oneChar(vf,1) ;
-	    OneInfo *vi = vs->info[(int)t] ;
-	    if (vi)
-	      { if (!infoCheckFields (vi, vf))
-		  { fprintf (stderr, "ONE file error %s: schema mismatch line %" PRId64 " linetype %c\n",
-			     path, vf->line, t) ;
-		    oneFileDestroy (vf) ;
-		    return NULL ;
-		  }
+	    int oldMax = vf->nFieldMax ;
+	    schemaAddInfoFromLine (vsFile, vf, t, oneChar(vf,0)) ;
+	    if (oneChar(vf,0) == 'G') vf->groupType = vsFile->groupType ;
+	    if (oneChar(vf,0) == 'O') vf->objectType = vsFile->objectType ;
+	    OneInfo *vi = vsFile->info[(int)t] ;
+	    vf->info[(int)t] = infoDeepCopy (vi) ;
+	    if (vi->binaryTypePack)
+	      { U8 x = vi->binaryTypePack ;
+		vf->binaryTypeUnpack[x] = t ;
+		vf->binaryTypeUnpack[x+1] = t ;
 	      }
-	    else if (isDynamic)
-	      { int oldMax = vf->nFieldMax ;
-		schemaAddInfoFromLine (vs, vf, t, oneChar(vf,0)) ;
-		if (oneChar(vf,0) == 'G') vf->groupType = vs->groupType ;
-		if (oneChar(vf,0) == 'O') vf->objectType = vs->objectType ;
-		vi = vs->info[(int)t] ;
-		vf->info[(int)t] = infoDeepCopy (vi) ;
-		if (vi->binaryTypePack)
-		  { U8 x = vi->binaryTypePack ;
-		    vf->binaryTypeUnpack[x] = t ;
-		    vf->binaryTypeUnpack[x+1] = t ;
-		  }
-		if (vs->nFieldMax > oldMax)
-		  { free (vf->field) ;
-		    vf->nFieldMax = vs->nFieldMax ;
-		    vf->field = new (vf->nFieldMax, OneField) ;
-		  }
+	    if (vsFile->nFieldMax > oldMax)
+	      { free (vf->field) ;
+		vf->nFieldMax = vsFile->nFieldMax ;
+		vf->field = new (vf->nFieldMax, OneField) ;
 	      }
 	  }
 	  break ;
@@ -1432,9 +1452,17 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
   vf->isCheckString = false;   // user can set this back to true if they wish
 
   if (!vf->objectType)  // failed to get a schema from function call or from file
-    { fprintf (stderr, "ONEfile error %s: no schema available\n", path) ;
+    { fprintf (stderr, "ONEcode file open error %s: no object type identified\n", path) ;
+      fclose (vf->f) ;
       oneFileDestroy (vf) ;
-      return NULL ;
+      return 0 ;
+    }
+
+  if (!isBareFile && vsArg && !oneFileCheckSchema (vf, vsArg, false)) // check schema intersection
+    { fprintf (stderr, "ONEcode file open error %s: schema mismatch to code requirement\n", path) ;
+      fclose (vf->f) ;
+      oneFileDestroy (vf) ;
+      return 0 ;
     }
 
   // allocate codec buffer - always allocate enough to handle fields of all line types
@@ -1454,7 +1482,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 
   // if parallel, allocate a OneFile array for parallel thread objects, switch vf to head of array
 
-  if (nthreads > 1)
+  if (nthreads > 1) // should we allow multiple threads for a bare file, which has no index?
     { int i, j ;
 
       if (strcmp (path, "-") == 0)
@@ -1469,8 +1497,8 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 
       startOff = ftello (vf->f) ;
       for (i = 1; i < nthreads; i++)
-	{ vs = vs0 ; // needed because vs will have changed to map to the relevant page
-	  OneFile *v = oneFileCreate(&vs, vf->fileType); // need to do this after header is read
+	{ OneSchema *vs = vs0 ; // needed because vs will have changed to map to the relevant page
+	  OneFile   *v = oneFileCreate(&vs, vf->fileType); // need to do this after header is read
 	  vf[i] = *v ;
 	  free (v) ;
 	  v = vf+i;
@@ -1517,7 +1545,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vs, const char *fileType,
 	}
     } // end of parallel threads block
 
-  if (isDynamic)
+  if (!isBareFile)
     oneSchemaDestroy (vs0) ;
     
   return vf;
@@ -1679,6 +1707,12 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   oneInheritProvenance (vf, vfIn);
   oneInheritReference  (vf, vfIn);
   oneInheritDeferred   (vf, vfIn);
+
+  if (vfIn->headerText)
+    { OneHeaderText *tin = vfIn->headerText ;
+      OneHeaderText *t = new0 (1, OneHeaderText) ;
+      while (tin) { t->text = tin->text ; tin = tin->nxt ; t = t->nxt = new0 (1, OneHeaderText) ; }
+    }     
   
   // set info[]->given, and resize codecBuf accordingly
   I64 size = vf->codecBufSize;
@@ -1703,52 +1737,70 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   return vf ;
 }
 
-bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema)
-{
-  char      *fixedText = schemaFixNewlines (textSchema) ;
-  OneSchema *vs = oneSchemaCreateFromText (fixedText) ;
-  free (fixedText) ;
-  OneSchema *vs0 = vs ; // need to keep the root to destroy the full schema
+bool oneFileCheckSchema (OneFile *vf, OneSchema *vs, bool isRequired)
+{ 
+  bool isMatch = true ;
+  int  i, j ;
+
+  if (!vf || !vs) return false ;
 
   if (vs->nxt) // the textSchema contained at least one 'P' line to define a file type
     { while (vs && (!vs->primary || strcmp (vs->primary, vf->fileType))) vs = vs->nxt ;
       if (!vs)
 	{ fprintf (stderr, "OneSchema mismatch: file type %s not found in schema\n",
 		   vf->fileType) ;
-	  oneSchemaDestroy (vs0) ;
 	  return false ;
 	}
     }
 
   // at this point vs->primary matches vf->fileType
 
-  bool isMatch = true ;
-  int  i, j ;
+  if (vs->objectType && vf->objectType && vs->objectType != vf->objectType)
+    { fprintf (stderr, "OneSchema mismatch: file object type %c is not schema object type %c",
+	       vf->objectType, vs->objectType) ;
+      isMatch = false ;
+    }
+  if (vs->groupType && vf->groupType && vs->groupType != vf->groupType)
+    { fprintf (stderr, "OneSchema mismatch: file group type %c is not schema group type %c",
+	       vf->groupType, vs->groupType) ;
+      isMatch = false ;
+    }
 
   for (i = 'A' ; i <= 'z' ; ++i)
-    if (vs->info[i])
-      { OneInfo *vis = vs->info[i] ;
-	OneInfo *vif = vf->info[i] ;
-	if (!vif)
-	  { fprintf (stderr, "OneSchema mismatch: record type %c missing in file schema\n", i) ;
-	    isMatch = false ;
-	  }
-	else if (vif->nField != vis->nField)
-	  { fprintf (stderr, "OneSchema mismatch: number of fields for type %c file %d != %d\n",
-		     i, vif->nField, vis->nField) ;
-	    isMatch = false ;
-	  }
-	else
-	  for (j = 0 ; j < vif->nField ; ++j)
-	    if (vif->fieldType[j] != vis->fieldType[j])
-	      { fprintf (stderr, "OneSchema mismatch: field %d for type %c file %s != %s\n",
-			 j,i,oneTypeString[vif->fieldType[j]],oneTypeString[vis->fieldType[j]]);
-		isMatch = false ;
-	      }
-      }
-
-  oneSchemaDestroy (vs0) ;
+    { OneInfo *vis = vs->info[i] ;
+      OneInfo *vif = vf->info[i] ;
+      if (isRequired && vis && !vif)
+	{ fprintf (stderr, "OneSchema mismatch: record type %c missing in file schema\n", i) ;
+	  isMatch = false ;
+	}
+      else if (vis && vif)
+	{ if (vif->nField != vis->nField)
+	    { fprintf (stderr, "OneSchema mismatch: number of fields for type %c file %d != %d\n",
+		       i, vif->nField, vis->nField) ;
+	      isMatch = false ;
+	    }
+	  else
+	    for (j = 0 ; j < vif->nField ; ++j)
+	      if (vif->fieldType[j] != vis->fieldType[j])
+		{ fprintf (stderr, "OneSchema mismatch: field %d for type %c file %s != %s\n",
+			   j,i,oneTypeString[vif->fieldType[j]],oneTypeString[vis->fieldType[j]]);
+		  isMatch = false ;
+		}
+	}
+    }
+  
   return isMatch ;
+}
+
+bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema)
+{
+  char      *fixedText = schemaFixNewlines (textSchema) ;
+  OneSchema *vs = oneSchemaCreateFromText (fixedText) ;
+  bool       isCheck = oneFileCheckSchema (vf, vs, true) ;
+
+  free (fixedText) ;
+  oneSchemaDestroy (vs) ;
+  return isCheck ;
 }
 
 /***********************************************************************************
@@ -1868,27 +1920,37 @@ bool oneAddDeferred (OneFile *vf, char *filename)
  *
  **********************************************************************************/
 
-static void writeInfoSpec (OneFile *vf, char ci)
+static bool writeCounts (OneFile *vf, int i)
 {
-  int i ;
-  OneInfo *vi = vf->info[(int) ci] ;
-
-  if (ci == vf->groupType)
-    fprintf (vf->f, "\n~ G %c %d", ci, vi->nField) ;
-  else if (ci == vf->objectType)
-    fprintf (vf->f, "\n~ O %c %d", ci, vi->nField) ;
+  OneInfo *li = vf->info[i] ;
+    
+  if (li != NULL && li->given.count > 0)
+    { fprintf (vf->f, "\n# %c %" PRId64 "", i, li->given.count);
+      vf->line += 1;
+      if (li->given.max > 0)
+	{ fprintf (vf->f, "\n@ %c %" PRId64 "", i, li->given.max);
+	  vf->line += 1;
+	}
+      if (li->given.total > 0)
+	{ fprintf (vf->f, "\n+ %c %" PRId64 "", i, li->given.total);
+	  vf->line += 1;
+	}
+      if (li->given.groupCount > 0)
+	{ fprintf (vf->f, "\n%% %c # %c %" PRId64 "", vf->groupType, i, li->given.groupCount);
+	  vf->line += 1;
+	}
+      if (li->given.groupTotal > 0)
+	{ fprintf (vf->f, "\n%% %c + %c %" PRId64 "", vf->groupType, i, li->given.groupTotal);
+	  vf->line += 1;
+	}
+      return true ;
+    }
   else
-    fprintf (vf->f, "\n~ D %c %d", ci, vi->nField) ;
-  for (i = 0 ; i < vi->nField ; ++i)
-    fprintf (vf->f, " %d %s",
-	     (int)strlen(oneTypeString[vi->fieldType[i]]), oneTypeString[vi->fieldType[i]]) ;
-  if (vi->comment)
-    oneWriteComment (vf, "%s", vi->comment) ;
+    return false ; 
 }
 
 static void writeHeader (OneFile *vf)
 { int         i,n;
-  OneInfo   *li;
 
   assert (vf->isWrite) ;
   assert (vf->line == 0) ;
@@ -1936,11 +1998,14 @@ static void writeHeader (OneFile *vf)
     }
 
   // write the schema into the header - no need for file type, version etc. since already given
-  if (vf->groupType) writeInfoSpec (vf, vf->groupType) ;
-  if (vf->objectType) writeInfoSpec (vf, vf->objectType) ;
-  for (i = 'A' ; i <= 'z' ; ++i)
-    if (isalnum(i) && vf->info[i] && i != vf->objectType && i != vf->groupType)
-      writeInfoSpec (vf, i) ;
+  if (vf->groupType) writeInfoSpec (vf->f, vf, vf->groupType) ;
+  for (i = 'a' ; i <= 'z' ; ++i)
+    if (vf->info[i] && i != vf->objectType && i != vf->groupType)
+      writeInfoSpec (vf->f, vf, i) ;
+  if (vf->objectType) writeInfoSpec (vf->f, vf, vf->objectType) ;
+  for (i = 'A' ; i <= 'Z' ; ++i)
+    if (vf->info[i] && i != vf->objectType && i != vf->groupType)
+      writeInfoSpec (vf->f, vf, i) ;
 
   // any header text on '.' lines
   if (vf->headerText)
@@ -1959,36 +2024,16 @@ static void writeHeader (OneFile *vf)
   else             // write counts based on those supplied in input header
     { fprintf (vf->f, "\n.") ;
       bool isCountWritten = false ;
-      for (i = 'A'; i <= 'Z'+1 ; i++)
-	{ if (i == 'Z'+1)
-	    { if (vf->groupType) // NB group types are all lower case so > 'Z'+1
-		i = vf->groupType ;
-	      else
-		break ;
-	    }
-	  li = vf->info[i];
-          if (li != NULL && li->given.count > 0)
-            { isCountWritten = true ;
-	      fprintf (vf->f, "\n# %c %" PRId64 "", i, li->given.count);
-              vf->line += 1;
-              if (li->given.max > 0)
-                { fprintf (vf->f, "\n@ %c %" PRId64 "", i, li->given.max);
-                  vf->line += 1;
-                }
-              if (li->given.total > 0)
-                { fprintf (vf->f, "\n+ %c %" PRId64 "", i, li->given.total);
-                  vf->line += 1;
-                }
-              if (li->given.groupCount > 0)
-                { fprintf (vf->f, "\n%% %c # %c %" PRId64 "", vf->groupType, i, li->given.groupCount);
-                  vf->line += 1;
-                }
-              if (li->given.groupTotal > 0)
-                { fprintf (vf->f, "\n%% %c + %c %" PRId64 "", vf->groupType, i, li->given.groupTotal);
-                  vf->line += 1;
-                }
-            }
-        }
+      if (vf->groupType)
+	isCountWritten |= writeCounts (vf, vf->groupType) ;
+      if (vf->objectType)
+	isCountWritten |= writeCounts (vf, vf->objectType) ;
+      for (i = 'a' ; i <= 'z' ; i++)
+	if (i != vf->groupType && i != vf->objectType)
+	  isCountWritten |= writeCounts (vf, i) ;
+      for (i = 'A' ; i <= 'Z' ; i++)
+	if (i != vf->groupType && i != vf->objectType)
+	  isCountWritten |= writeCounts (vf, i) ;
       if (isCountWritten)
 	fprintf (vf->f, "\n.") ;
     }
@@ -2314,14 +2359,8 @@ static void oneWriteFooter (OneFile *vf)
 
   //  first the per-linetype information
   codecBuf = new (vcMaxSerialSize()+1, char) ; // +1 for added up unused 0-terminator
-  for (i = 'A'; i <= 'Z'+1 ; i++)
-    { if (i == 'Z'+1)
-	{ if (vf->groupType) // NB group types are all lower case so > 'Z'+1
-	    i = vf->groupType ;
-	  else
-	    break ;
-	}
-      li = vf->info[i];
+  for (i = 'A'; i <= 'z' ; i++)
+    { li = vf->info[i];
       if (li != NULL && li->accum.count > 0)
         { fprintf (vf->f, "# %c %" PRId64 "\n", i, li->accum.count);
 	  if (li->listEltSize)
@@ -2369,7 +2408,7 @@ static void oneWriteFooter (OneFile *vf)
   //   the master file (if a parallel OneFile).
 
 void oneFinalizeCounts(OneFile *vf)
-{ int       i, j, n, k, len;
+{ int       i, j, k, len;
   OneInfo *li, *ln;
 
   if (vf->share < 0)
@@ -2387,8 +2426,8 @@ void oneFinalizeCounts(OneFile *vf)
   //  Close current groups at the end of each part (if any)
 
   if (vf->groupType > 0)
-    for (i = 'A'; i <= 'Z'; i++)
-      if (vf->info[i] != NULL)
+    for (i = 'A'; i <= 'z'; i++)
+      if (i != vf->groupType && vf->info[i] != NULL)
         for (j = 0; j < len; j++)
           if (vf[j].inGroup)
             { I64 oc, ot;
@@ -2414,11 +2453,7 @@ void oneFinalizeCounts(OneFile *vf)
 
   //  first the per-linetype information
 
-  n = vf->groupType;
-  if (n == 0)
-    n = 'Z';
-
-  for (i = 'A'; i <= n; i++)
+  for (i = 'A'; i <= 'z' ; i++)
     { ln = vf->info[i];
       for (j = 1; j < len; j++)
         { li = (vf+j)->info[i];
