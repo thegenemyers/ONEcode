@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Dec  3 06:49 2022 (rd109)
+ * Last edited: Mar 11 01:27 2024 (rd109)
  * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -62,7 +62,8 @@ int main (int argc, char **argv)
   char *fileType = 0 ;
   char *outFileName = "-" ;
   char *schemaFileName = 0 ;
-  bool isNoHeader = false, isHeaderOnly = false, isBinary = false, isVerbose = false ;
+  bool isNoHeader = false, isHeaderOnly = false, isWriteSchema = false, 
+    isBinary = false, isVerbose = false ;
   IndexList *objList = 0, *groupList = 0 ;
   
   timeUpdate (0) ;
@@ -73,9 +74,10 @@ int main (int argc, char **argv)
   if (!argc)
     { fprintf (stderr, "ONEview [options] onefile\n") ;
       fprintf (stderr, "  -t --type <abc>           file type, e.g. seq, aln - required if no header\n") ;
-      fprintf (stderr, "  -S --schema <schemafile>  schema file name\n") ;
+      fprintf (stderr, "  -S --schema <schemafile>  schema file name for reading file\n") ;
       fprintf (stderr, "  -h --noHeader             skip the header in ascii output\n") ;
       fprintf (stderr, "  -H --headerOnly           only write the header (in ascii)\n") ;
+      fprintf (stderr, "  -s --writeSchema          write a schema file based on this file\n") ;
       fprintf (stderr, "  -b --binary               write in binary (default is ascii)\n") ;
       fprintf (stderr, "  -o --output <filename>    output file name (default stdout)\n") ;
       fprintf (stderr, "  -i --index x[-y](,x[-y])* write specified objects\n") ;
@@ -98,6 +100,8 @@ int main (int argc, char **argv)
       { isNoHeader = true ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-H") || !strcmp (*argv, "--headerOnly"))
       { isHeaderOnly = true ; --argc ; ++argv ; }
+    else if (!strcmp (*argv, "-s") || !strcmp (*argv, "--writeSchema"))
+      { isWriteSchema = true ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-b") || !strcmp (*argv, "--binary"))
       { isBinary = true ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-v") || !strcmp (*argv, "--verbose"))
@@ -118,65 +122,68 @@ int main (int argc, char **argv)
 
   OneSchema *vs = 0 ;
   if (schemaFileName && !(vs = oneSchemaCreateFromFile (schemaFileName)))
-      die ("failed to read schema file %s", schemaFileName) ;
+    die ("failed to read schema file %s", schemaFileName) ;
   OneFile *vfIn = oneFileOpenRead (argv[0], vs, fileType, 1) ; /* reads the header */
   if (!vfIn) die ("failed to open one file %s", argv[0]) ;
 
   if ((objList || groupList) && !vfIn->isBinary)
     die ("%s is ascii - you can only access objects and groups by index in binary files", argv[0]) ;
-  
-  OneFile *vfOut = oneFileOpenWriteFrom (outFileName, vfIn, isBinary, 1) ;
-  if (!vfOut) die ("failed to open output file %s", outFileName) ;
 
-  if (isNoHeader) vfOut->isNoAsciiHeader = true ; // will have no effect if binary
+  if (isWriteSchema)
+    { oneFileWriteSchema (vfIn, outFileName) ; }
+  else
+    { OneFile *vfOut = oneFileOpenWriteFrom (outFileName, vfIn, isBinary, 1) ;
+      if (!vfOut) die ("failed to open output file %s", outFileName) ;
 
-  if (!isHeaderOnly)
-    { oneAddProvenance (vfOut, "ONEview", "0.0", command) ;
+      if (isNoHeader) vfOut->isNoAsciiHeader = true ; // will have no effect if binary
+
+      if (!isHeaderOnly)
+	{ oneAddProvenance (vfOut, "ONEview", "0.0", command) ;
       
-      static size_t fieldSize[128] ;
-      for (i = 0 ; i < 128 ; ++i)
-	if (vfIn->info[i]) fieldSize[i] = vfIn->info[i]->nField*sizeof(OneField) ;
+	  static size_t fieldSize[128] ;
+	  for (i = 0 ; i < 128 ; ++i)
+	    if (vfIn->info[i]) fieldSize[i] = vfIn->info[i]->nField*sizeof(OneField) ;
       
-      if (objList)
-	{ while (objList)
-	    { if (!oneGotoObject (vfIn, objList->i0))
-		die ("can't locate to object %lld", objList->i0 ) ;
-	      if (!oneReadLine (vfIn))
-		die ("can't read object %lld", objList->i0) ;
-	      while (objList->i0 < objList->iN)
-		{ transferLine (vfIn, vfOut, fieldSize) ;
-		  if (!oneReadLine (vfIn)) break ;
-		  if (vfIn->lineType == vfIn->objectType) ++objList->i0 ;
+	  if (objList)
+	    { while (objList)
+		{ if (!oneGotoObject (vfIn, objList->i0))
+		    die ("can't locate to object %lld", objList->i0 ) ;
+		  if (!oneReadLine (vfIn))
+		    die ("can't read object %lld", objList->i0) ;
+		  while (objList->i0 < objList->iN)
+		    { transferLine (vfIn, vfOut, fieldSize) ;
+		      if (!oneReadLine (vfIn)) break ;
+		      if (vfIn->lineType == vfIn->objectType) ++objList->i0 ;
+		    }
+		  objList = objList->next ;
 		}
-	      objList = objList->next ;
 	    }
-	}
-      else if (groupList)
-	{ while (groupList)
-	    { if (!oneGotoGroup (vfIn, groupList->i0))
-		die ("can't locate to group %lld", groupList->i0 ) ;
-	      if (!oneReadLine (vfIn))
-		die ("can't read group %lld", groupList->i0) ;
-	      while (groupList->i0 < groupList->iN)
-		{ transferLine (vfIn, vfOut, fieldSize) ;
-		  if (!oneReadLine (vfIn)) break ;
-		  if (vfIn->lineType == vfIn->groupType) ++groupList->i0 ;
+	  else if (groupList)
+	    { while (groupList)
+		{ if (!oneGotoGroup (vfIn, groupList->i0))
+		    die ("can't locate to group %lld", groupList->i0 ) ;
+		  if (!oneReadLine (vfIn))
+		    die ("can't read group %lld", groupList->i0) ;
+		  while (groupList->i0 < groupList->iN)
+		    { transferLine (vfIn, vfOut, fieldSize) ;
+		      if (!oneReadLine (vfIn)) break ;
+		      if (vfIn->lineType == vfIn->groupType) ++groupList->i0 ;
+		    }
+		  groupList = groupList->next ;
 		}
-	      groupList = groupList->next ;
 	    }
+	  else
+	    while (oneReadLine (vfIn))
+	      transferLine (vfIn, vfOut, fieldSize) ;
 	}
-      else
-	while (oneReadLine (vfIn))
-	  transferLine (vfIn, vfOut, fieldSize) ;
+      oneFileClose (vfOut) ;
     }
-  
+      
   oneFileClose (vfIn) ;
-  oneFileClose (vfOut) ;
-  oneSchemaDestroy (vs) ;
+  if (vs) oneSchemaDestroy (vs) ;
   
   free (command) ;
-  if (isVerbose)
-    timeTotal (stderr) ;
+  if (isVerbose) timeTotal (stderr) ;
 
   exit (0) ;
 }
