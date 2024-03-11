@@ -3,11 +3,11 @@
  *  File: ONElib.h
  *    Header for ONE file reading and writing
  *
- *  Authors: Richard Durbin (rd109@cam.ac.uk), Gene Myers (myers@mpi-cbg.de)
+ *  Authors: Richard Durbin (rd109@cam.ac.uk), Gene Myers (gene.myers@gmail.com)
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Jun 10 08:20 2023 (rd109)
+ * Last edited: Mar 10 22:36 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -207,7 +207,9 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
   //      O <char> <field_list>   // definition of object type
   //      G <char> <field_list>   // definition of group type - first field must be an int
   //      D <char> <field_list>   // definition of line
-  //   <char> must be a lower or upper case letter.
+  //   <char> must be a lower or upper case letter.  By convention upper case letters are used
+  //      for objects and records within objects, and lower case letters for groups and records not
+  //      assigned to objects, including global and group information.
   //   <field_list> is a list of field types from:
   //      CHAR, INT, REAL, STRING, INT_LIST, REAL_LIST, STRING_LIST, DNA
   //      Only one list type (STRING, *_LIST or DNA) is allowed per line type.
@@ -227,32 +229,40 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
 
 void oneSchemaDestroy (OneSchema *schema) ;
 
+void oneFileWriteSchema (OneFile *vf, char *filename) ;
+
+  // Utility to write the schema of an open oneFile in a form that can be read by
+  //   oneSchemaCreateFromFile().
+
 //  READING ONE FILES:
 
 OneFile *oneFileOpenRead (const char *path, OneSchema *schema, const char *type, int nthreads) ;
 
   // Open ONE file 'path', either binary or ascii encoded, for reading.
   //   If the file doesn't have a header, then 'type' must be specified,
-  //   otherwise, if 'type' is non-zero it must match the header type.
+  //   otherwise, if 'type' is non-zero it must match a header ptype (primary or secondary).
   //   All header information (if present) is read.
   // 'schema' is also optional.  If it is NULL then the file must contain its own schema.  
   //   If 'schema' is present then it must support 'type', and if the file contains its 
-  //   own schema, then that must be a subset of the one for this type in 'schema'.
-  // If nthreads > 1 then nthreadds OneFiles are generated as an array and the pointer
+  //   own schema, then that must match 'schema' where they share line types (there can be
+  //   additional record types in both the file's schema, and in the argument 'schema').
+  // If nthreads > 1 then nthreads OneFiles are generated as an array and the pointer
   //   to the first, called the master, is returned.  The other nthreads-1 files are
   //   called slaves.  The package routines are aware of when a OneFile argument is a
   //   slave or master in a parallel group.  The master recieves provenance, counts, etc.
   //   The slaves only read data and have the virtue of sharing indices and codecs with
   //   the master if relevant.
 
+bool oneFileCheckSchema (OneFile *vf, OneSchema *schema, bool isRequired) ;
 bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema) ;
-// should also have oneFileCheckSchema (vf, OneSchema *schema) ?
 
-  // Checks if file schema is consistent with text schema.  Mismatches are reported to stderr.
-  // Filetype and all linetypes in text must match.  File schema can contain additional linetypes.
+  // Checks if file schema is consistent with provided schema.  Mismatches are reported to stderr.
+  // Filetype and all linetypes must match.  File schema can contain additional linetypes.
+  // If isRequired is true then file schema must have all line types in supplied schema.
   // e.g. if (!oneFileCheckSchemaText (vf, "P 3 seq\nD S 1 3 DNA\nD Q 1 6 STRING\nD P 0\n")) die () ;
   // This is provided to enable a program to ensure that its assumptions about data layout
   // are satisfied.
+  // This is used by oneFileOpenRead() with isRequired false to check consistency.
 
 char oneReadLine (OneFile *vf) ;
 
