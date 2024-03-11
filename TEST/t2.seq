@@ -1,0 +1,10 @@
+1 3 seq 1 1
+~ G s 2 3 INT 6 STRING
+~ D n 1 3 INT
+~ O S 1 3 DNA
+.
+s 0 5 scaf1
+n 2
+S 8 acgtacgt
+n 4
+S 6 tcgatt
