@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Mar  7 00:59 2024 (rd109)
+ * Last edited: Mar 10 22:36 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -207,7 +207,9 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
   //      O <char> <field_list>   // definition of object type
   //      G <char> <field_list>   // definition of group type - first field must be an int
   //      D <char> <field_list>   // definition of line
-  //   <char> must be a lower or upper case letter.
+  //   <char> must be a lower or upper case letter.  By convention upper case letters are used
+  //      for objects and records within objects, and lower case letters for groups and records not
+  //      assigned to objects, including global and group information.
   //   <field_list> is a list of field types from:
   //      CHAR, INT, REAL, STRING, INT_LIST, REAL_LIST, STRING_LIST, DNA
   //      Only one list type (STRING, *_LIST or DNA) is allowed per line type.
@@ -226,6 +228,11 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
   //   corresponding to one primary file type.
 
 void oneSchemaDestroy (OneSchema *schema) ;
+
+void oneFileWriteSchema (OneFile *vf, char *filename) ;
+
+  // Utility to write the schema of an open oneFile in a form that can be read by
+  //   oneSchemaCreateFromFile().
 
 //  READING ONE FILES:
 
@@ -246,14 +253,16 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *schema, const char *type,
   //   The slaves only read data and have the virtue of sharing indices and codecs with
   //   the master if relevant.
 
+bool oneFileCheckSchema (OneFile *vf, OneSchema *schema, bool isRequired) ;
 bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema) ;
-// should also have oneFileCheckSchema (vf, OneSchema *schema) ?
 
-  // Checks if file schema is consistent with text schema.  Mismatches are reported to stderr.
-  // Filetype and all linetypes in text must match.  File schema can contain additional linetypes.
+  // Checks if file schema is consistent with provided schema.  Mismatches are reported to stderr.
+  // Filetype and all linetypes must match.  File schema can contain additional linetypes.
+  // If isRequired is true then file schema must have all line types in supplied schema.
   // e.g. if (!oneFileCheckSchemaText (vf, "P 3 seq\nD S 1 3 DNA\nD Q 1 6 STRING\nD P 0\n")) die () ;
   // This is provided to enable a program to ensure that its assumptions about data layout
   // are satisfied.
+  // This is used by oneFileOpenRead() with isRequired false to check consistency.
 
 char oneReadLine (OneFile *vf) ;
 
