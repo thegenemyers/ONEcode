@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Mar 10 22:36 2024 (rd109)
+ * Last edited: Apr 16 18:58 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -207,7 +207,7 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
   //      O <char> <field_list>   // definition of object type
   //      G <char> <field_list>   // definition of group type - first field must be an int
   //      D <char> <field_list>   // definition of line
-  //   <char> must be a lower or upper case letter.  By convention upper case letters are used
+  //   <char> must be a lower or upper case letter. By convention upper case letters are used
   //      for objects and records within objects, and lower case letters for groups and records not
   //      assigned to objects, including global and group information.
   //   <field_list> is a list of field types from:
@@ -262,7 +262,7 @@ bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema) ;
   // e.g. if (!oneFileCheckSchemaText (vf, "P 3 seq\nD S 1 3 DNA\nD Q 1 6 STRING\nD P 0\n")) die () ;
   // This is provided to enable a program to ensure that its assumptions about data layout
   // are satisfied.
-  // This is used by oneFileOpenRead() with isRequired false to check consistency.
+  // It is also used by oneFileOpenRead() with isRequired false to check consistency.
 
 char oneReadLine (OneFile *vf) ;
 

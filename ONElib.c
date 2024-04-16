@@ -1,22 +1,23 @@
 /*****************************************************************************************
  *
- *  file: ONElib.c
+ *  File: ONElib.c
  *    implementation for ONElib.h
  *
  *  Author: Richard Durbin (rd109@cam.ac.uk), Gene Myers (gene.myers@gmail.com)
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Mar 11 05:21 2024 (rd109)
+ * Last edited: Apr 16 19:37 2024 (rd109)
+ * * Apr 16 18:59 2024 (rd109): major change to object and group indexing
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
  * * Mar 11 02:48 2024 (rd109): added oneFileWriteSchema() to write schema files for bare text parsing
  * * Mar 10 07:16 2024 (rd109): changed oneOpenFileRead semantics to prioritize file schema
  * * Dec 20 21:29 2022 (rd109): changed DNA compression to little-endian: natural on Intel, Apple
  * * Apr 23 00:31 2020 (rd109): global rename of VGP to ONE, Vgp to One, vgp to one
  * * Apr 20 11:27 2020 (rd109): added VgpSchema to make schema dynamic
- * * Dec 27 09:46 2019 (gene): style edits + compactify code
+ * * Dec 27 09:46 2019 (gene):  style edits + compactify code
  * * Jul  8 04:28 2019 (rd109): refactored to use info[]
- * * Created: Thu Feb 21 22:40:28 2019 (rd09)
+ * * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *
  ****************************************************************************************/
 
@@ -47,7 +48,7 @@
 
 // set major and minor code versions
 
-#define MAJOR 1
+#define MAJOR 2
 #define MINOR 1
 
 //  utilities with implementation at the end of the file
@@ -1240,7 +1241,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
     if (c == '1')
       { int  major, minor, slen;
 	char *primaryName ;
-      
+
 	if (fscanf (f, " %d", &slen) != 1)
 	  OPEN_ERROR1("line 1: failed to read type name length") ;
 	if (slen == 0)
@@ -1253,7 +1254,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	    OPEN_ERROR1("end of file before end of line 1") ;
 	++curLine ;
 	if (major != MAJOR)
-	  OPEN_ERROR3("major version file %d > code %d", major, MAJOR) ;
+	  OPEN_ERROR3("major version file %d != code %d", major, MAJOR) ;
 	if (minor > MINOR)
 	  OPEN_ERROR3("minor version file %d > code %d", minor, MINOR) ;
 	vs0 = vsFile = oneSchemaCreateDynamic (primaryName, 0) ; // create a shell schema
@@ -1300,7 +1301,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	  oneFileDestroy (vf) ;
 	  return 0 ;
 	}
-      
+
       oneReadLine(vf);  // can't fail because we checked file eof already
 
       switch (vf->lineType)
@@ -1461,14 +1462,14 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
     { fprintf (stderr, "ONEcode file open error %s: no object type identified\n", path) ;
       fclose (vf->f) ;
       oneFileDestroy (vf) ;
-      return 0 ;
+      return NULL ;
     }
 
   if (!isBareFile && vsArg && !oneFileCheckSchema (vf, vsArg, false)) // check schema intersection
     { fprintf (stderr, "ONEcode file open error %s: schema mismatch to code requirement\n", path) ;
       fclose (vf->f) ;
       oneFileDestroy (vf) ;
-      return 0 ;
+      return NULL ;
     }
 
   // allocate codec buffer - always allocate enough to handle fields of all line types
@@ -1709,7 +1710,7 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   oneSchemaDestroy (vs0) ;
   if (!vf)
     return NULL ;
-  
+
   oneInheritProvenance (vf, vfIn);
   oneInheritReference  (vf, vfIn);
   oneInheritDeferred   (vf, vfIn);
@@ -1744,7 +1745,7 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
 }
 
 bool oneFileCheckSchema (OneFile *vf, OneSchema *vs, bool isRequired)
-{ 
+{
   bool isMatch = true ;
   int  i, j ;
 
@@ -1794,7 +1795,7 @@ bool oneFileCheckSchema (OneFile *vf, OneSchema *vs, bool isRequired)
 		}
 	}
     }
-  
+
   return isMatch ;
 }
 
@@ -2290,7 +2291,7 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
             if (listLen > li->accum.max)
               li->accum.max = listLen;
 
-            fprintf (vf->f, " %" PRId64 "", listLen);
+	    fprintf (vf->f, " %" PRId64 "", listLen);
             if (li->fieldType[i] == oneSTRING || li->fieldType[i] == oneDNA)
               { if (listLen > INT_MAX)
                   die ("ONE write error: string length %" PRId64 " > current max %d", listLen, INT_MAX);
@@ -2326,25 +2327,25 @@ void oneWriteLineDNA2bit (OneFile *vf, char lineType, I64 len, U8 *dnaBuf) // NB
 
 void oneWriteComment (OneFile *vf, char *format, ...)
 {
+  char *comment ;
   va_list args ;
+
+  va_start (args, format) ; 
+  vasprintf (&comment, format, args) ; 
+  va_end (args) ;
 
   if (vf->isCheckString) // then check no newlines in format
     { char *s = format ;
-      while (*s) if (*s++ == '\n') die ("newline in comment format string: %s", format) ;
+      while (*s) if (*s++ == '\n') die ("newline in comment string: %s", comment) ;
     }
 
-  va_start (args, format) ; 
   if (vf->isLastLineBinary) // write a comment line
-    { char *comment ;
-      vasprintf (&comment, format, args) ; 
-      oneWriteLine (vf, '/', strlen(comment), comment) ;
-      free (comment) ;
-    }
+    oneWriteLine (vf, '/', strlen(comment), comment) ;
   else // write on same line after space
     { fputc (' ', vf->f) ;
-      vfprintf (vf->f, format, args) ;
+      fprintf (vf->f, "%s", comment) ;
     }
-  va_end (args) ;
+  free (comment) ;
 }
 
 /***********************************************************************************
@@ -3547,7 +3548,7 @@ static inline int intGet (unsigned char *u, I64 *pval)
     case 0:
       switch (u[0] & 0x07)
 	{
-	case 0: die ("int packing error") ;
+	case 0: die ("int packing error") ; break ;
 	case 1: *pval = *(I64*)(u+1) & 0x0000000000ffff ; return 3 ;
 	case 2: *pval = *(I64*)(u+1) & 0x00000000ffffff ; return 4 ;
 	case 3: *pval = *(I64*)(u+1) & 0x000000ffffffff ; return 5 ;
@@ -3556,10 +3557,11 @@ static inline int intGet (unsigned char *u, I64 *pval)
 	case 6: *pval = *(I64*)(u+1) & 0xffffffffffffff ; return 8 ;
 	case 7: *pval = *(I64*)(u+1) ; return 9 ;
 	}
+      break ;
     case 4:
       switch (u[0] & 0x07)
 	{
-	case 0: die ("int packing error") ;
+	case 0: die ("int packing error") ; break ;
 	case 1: *pval = *(I64*)(u+1) | 0xffffffffffff0000 ; return 3 ;
 	case 2: *pval = *(I64*)(u+1) | 0xffffffffff000000 ; return 4 ;
 	case 3: *pval = *(I64*)(u+1) | 0xffffffff00000000 ; return 5 ;
@@ -3568,6 +3570,7 @@ static inline int intGet (unsigned char *u, I64 *pval)
 	case 6: *pval = *(I64*)(u+1) | 0xff00000000000000 ; return 8 ;
 	case 7: *pval = *(I64*)(u+1) ; return 9 ;
 	}
+      break ;
     }
   return 0 ; // shouldn't get here, but needed for compiler happiness
 }
@@ -3601,13 +3604,14 @@ static inline int intPut (unsigned char *u, I64 val)
 static inline I64 ltfRead (FILE *f)
 {
   unsigned char u[16] ;
-  I64 val ;
+  I64 val = 0 ;
 
   u[0] = getc (f) ;
   if (u[0] & 0x40)
-    { intGet (u, &val) ;
-      //      printf ("read %d n 1 u %02x\n", (int)val, u[0]) ;
-    }
+    val = (I64) (u[0] & 0x3f) ;
+    // { intGet (u, &val) ;
+    //   printf ("read %d n 1 u %02x\n", (int)val, u[0]) ;
+    // }
   else if (u[0] & 0x20)
     { u[1] = getc (f) ; intGet (u, &val) ;
       //      printf ("read %d n 2 u %02x %02x\n", (int)val, u[0], u[1]) ;

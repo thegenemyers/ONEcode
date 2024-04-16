@@ -13,7 +13,7 @@ PROGS = ONEstat ONEview
 all: $(LIB) $(PROGS)
 
 clean:
-	$(RM) *.o ONEstat ONEview $(LIB) ZZ* ONEcpptest.cpp ONEcpptest
+	$(RM) *.o ONEstat ONEview $(LIB) ZZ* TEST/ZZ* ONEcpptest.cpp ONEcpptest
 	$(RM) -r *.dSYM
 
 install:
@@ -50,7 +50,9 @@ ONEcpptest: ONEcpptest.cpp ONElib.o
 	$(CCPP) -D TEST_HEADER -o $@ $^
 
 test: ONEview ONEcpptest
-	./ONEview APPLICATIONS/Durbin/small.seq
-	./ONEcpptest APPLICATIONS/Durbin/small.1seq
+	./ONEview TEST/small.seq
+	cd test ; ../ONEview -b -o ZZ-small.1seq small.seq
+	./ONEcpptest TEST/ZZ-small.1seq
+	cd TEST ; source t1.sh ; cd ..
 
 ### end of file
