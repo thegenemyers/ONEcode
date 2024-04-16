@@ -1,0 +1,37 @@
+1 3 seq 2 1
+! 4 5 seqio 3 1.0 24 ./seqconvert -1 small.fa 19 2023-07-18_17:39:10
+! 4 7 ONEview 3 0.0 18 ONEview small.1seq 19 2023-07-21_11:00:56
+.
+~ G g 2 3 INT 6 STRING    group: count, name (e.g. use for flow cell/lane grouping)
+~ O S 1 3 DNA             sequence: the DNA string
+~ D H 2 3 INT 8 INT_LIST  hoco: uncompressed seqlen, then run length for each base
+~ D I 1 6 STRING          id: (optional) sequence identifier
+~ D Q 1 6 STRING          quality: Q values (ascii string = q+33)
+.
+# I 10
+@ I 5
++ I 41
+# S 10
+@ S 72
++ S 577
+.
+S 51 cttagtagcgatattagttaataaaggtaaattcaaatgcgagtggtagat
+I 4 seq1
+S 72 ctttaccctccgaggctcttatccaccagaaacttccgccggggtccaggactcttaacgttcttctgtaat
+I 4 seq2
+S 58 catattctgtcgtaaatgtagaagaaagtagtagacaactcagaacgatcagaacggt
+I 4 seq3
+S 42 ttttgagcgagagagaatgataagacctcgagggagcttgaa
+I 4 seq4
+S 55 tttaaatcaaaggccgaagtttttttaagcgacaaagcactttaatatcatatag
+I 4 seq5
+S 66 agagtgaatatcattaaactagacattcacgatagaaaattagttaattatttctctttccgagta
+I 4 seq6
+S 47 gctctgtataatgtttctgttttactgtgtttgggattatgctaagc
+I 4 seq7
+S 62 ccgagatctataacagtatcaaaaataaaaaacttttaataaaatattaaaattattgaaat
+I 4 seq8
+S 53 tagaagttgtttaataagttttattcacaatcgtttaatatttacacataaaa
+I 4 seq9
+S 71 acatttacatattgatgtaacactcctatagcctttgatgaccgaaaactttaatttttaatacgagagtt
+I 5 seq10
