@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University, 2019
  *
  * HISTORY:
- * Last edited: Jun 10 08:20 2023 (rd109)
+ * Last edited: Apr 30 22:52 2024 (rd109)
  *   * Dec 27 09:20 2019 (gene): style edits
  *   * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *
@@ -127,26 +127,7 @@ int main (int argc, char **argv)
     {
       //  Read data portion of file checking syntax and group sizes (if present)
 
-      { I64 lastObj = 0, lastSize = 0, lastLine = 0 ;
-	
-	lastObj = lastSize = lastLine = 0 ;
-	while (oneReadLine (vf))
-	  if (vf->lineType == vf->groupType)
-	    { if (lastLine > 0 && vf->object - lastObj != lastSize)
-		{ fprintf (stderr, "group size mismatch: group %c at line %" PRId64 " asserted %" PRId64 " objects",
-			   vf->groupType,  lastLine,  lastSize);
-		  fprintf (stderr, " but found %" PRId64 "\n", vf->object-lastObj) ;
-		}
-	      lastLine = vf->line ;
-	      lastSize = oneInt(vf,0) ;
-	      lastObj  = vf->object ;
-	    }
-	if (lastLine && vf->object - lastObj != lastSize)
-	  { fprintf (stderr, "group size mismatch: group %c at line %" PRId64 " asserted %" PRId64 " objects",
-		     vf->groupType,  lastLine,  lastSize) ;
-	    fprintf (stderr, " but found %" PRId64 "\n",  vf->object-lastObj) ;
-	  }
-      }
+      while (oneReadLine (vf)) ;
 
       if (isVerbose)
 	fprintf (stderr, "read %" PRId64 " objects in %" PRId64 " lines from OneFile %s type %s\n",
@@ -171,13 +152,11 @@ int main (int argc, char **argv)
    nTotal += 1 ;
 
 	for (i = 0; i < 128; i++)
-	  if (((i >= 'A' && i <= 'Z') || i == vf->groupType) && vf->info[i] != NULL)
+	  if (((i >= 'A' && i <= 'Z') || (i >= 'a' && i <= 'z')) && vf->info[i] != NULL)
 	    { OneInfo *li = vf->info[i] ;
 	      CHECK(given.count, accum.count, "count") ;
 	      CHECK(given.max, accum.max, "max") ;
 	      CHECK(given.total, accum.total, "total") ;
-	      CHECK(given.groupCount, accum.groupCount, "group count") ;
-	      CHECK(given.groupTotal, accum.groupTotal, "group total") ;
 	  }
 	if (isVerbose || nBad || nMissing)
 	  fprintf (stderr, "expected %" PRId64 " header content lines, of which %" PRId64 " bad and %" PRId64 " missing\n",

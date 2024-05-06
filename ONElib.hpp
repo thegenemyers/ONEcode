@@ -93,20 +93,15 @@ class ONEfile
 
   char*     getComment() { return C_1F::oneReadComment(vf) ; }
 
-  bool      gotoObject (int64_t i) { return C_1F::oneGotoObject (vf, i) ; }
-  int64_t   gotoGroup (int64_t i) { return C_1F::oneGotoGroup (vf, i) ; }
+  bool      gotoObject(char lineType, int64_t i) { return C_1F::oneGoto (vf, lineType, i) ; }
 
   // some extra functions to hide readable class attributes
 
   char      lineType() { return vf->lineType ; }
   int64_t   lineNumber() { return vf->line ; }
-  int64_t   object() { return vf->object ; }
-  int64_t   group() { return vf->group ; }
   int64_t   count(char lineType) { return vf->info[lineType]->given.count ; }
   int64_t   max(char lineType) { return vf->info[lineType]->given.max ; }
   int64_t   total(char lineType) { return vf->info[lineType]->given.total ; }
-  int64_t   groupCount(char lineType) { return vf->info[lineType]->given.groupCount ; }
-  int64_t   groupTotal(char lineType) { return vf->info[lineType]->given.groupTotal ; }
 } ;
 
 #ifdef TEST_HEADER

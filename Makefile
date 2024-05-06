@@ -49,10 +49,10 @@ ONEcpptest.cpp: ONElib.hpp
 ONEcpptest: ONEcpptest.cpp ONElib.o
 	$(CCPP) -D TEST_HEADER -o $@ $^
 
-test: ONEview ONEcpptest
+test: ONEview ONEcpptest TEST
 	./ONEview TEST/small.seq
 	cd test ; ../ONEview -b -o ZZ-small.1seq small.seq
 	./ONEcpptest TEST/ZZ-small.1seq
-	cd TEST ; source t1.sh ; cd ..
+	cd TEST ; source t1.sh ; source t2.sh ; cd ..
 
 ### end of file

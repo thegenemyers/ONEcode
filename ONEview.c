@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Mar 11 01:27 2024 (rd109)
+ * Last edited: Apr 30 23:43 2024 (rd109)
  * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -62,9 +62,10 @@ int main (int argc, char **argv)
   char *fileType = 0 ;
   char *outFileName = "-" ;
   char *schemaFileName = 0 ;
-  bool isNoHeader = false, isHeaderOnly = false, isWriteSchema = false, 
+  bool  isNoHeader = false, isHeaderOnly = false, isWriteSchema = false, 
     isBinary = false, isVerbose = false ;
-  IndexList *objList = 0, *groupList = 0 ;
+  char  indexType ;
+  IndexList *objList = 0 ;
   
   timeUpdate (0) ;
 
@@ -74,16 +75,15 @@ int main (int argc, char **argv)
   if (!argc)
     { fprintf (stderr, "ONEview [options] onefile\n") ;
       fprintf (stderr, "  -t --type <abc>           file type, e.g. seq, aln - required if no header\n") ;
-      fprintf (stderr, "  -S --schema <schemafile>  schema file name for reading file\n") ;
-      fprintf (stderr, "  -h --noHeader             skip the header in ascii output\n") ;
-      fprintf (stderr, "  -H --headerOnly           only write the header (in ascii)\n") ;
-      fprintf (stderr, "  -s --writeSchema          write a schema file based on this file\n") ;
-      fprintf (stderr, "  -b --binary               write in binary (default is ascii)\n") ;
-      fprintf (stderr, "  -o --output <filename>    output file name (default stdout)\n") ;
-      fprintf (stderr, "  -i --index x[-y](,x[-y])* write specified objects\n") ;
-      fprintf (stderr, "  -g --group x[-y](,x[-y])* write specified groups\n") ;
-      fprintf (stderr, "  -v --verbose              write commentary including timing\n") ;
-      fprintf (stderr, "index and group only work for binary files; '-i 0-10' outputs first 10 objects\n") ;
+      fprintf (stderr, "  -S --schema <schemafile>      schema file name for reading file\n") ;
+      fprintf (stderr, "  -h --noHeader                 skip the header in ascii output\n") ;
+      fprintf (stderr, "  -H --headerOnly               only write the header (in ascii)\n") ;
+      fprintf (stderr, "  -s --writeSchema              write a schema file based on this file\n") ;
+      fprintf (stderr, "  -b --binary                   write in binary (default is ascii)\n") ;
+      fprintf (stderr, "  -o --output <filename>        output file name (default stdout)\n") ;
+      fprintf (stderr, "  -i --index T x[-y](,x[-y])*   write specified objects/groups of type T\n") ;
+      fprintf (stderr, "  -v --verbose                  write commentary including timing\n") ;
+      fprintf (stderr, "index only works for binary files; '-i A 0-10' outputs first 10 objects of type A\n") ;
       exit (0) ;
     }
   
@@ -106,12 +106,10 @@ int main (int argc, char **argv)
       { isBinary = true ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-v") || !strcmp (*argv, "--verbose"))
       { isVerbose = true ; --argc ; ++argv ; }
-    else if (!strcmp (*argv, "-o") || !strcmp (*argv, "--output"))
+    else if ((!strcmp (*argv, "-o") || !strcmp (*argv, "--output")) && argc >= 2)
       { outFileName = argv[1] ; argc -= 2 ; argv += 2 ; }
-    else if (!strcmp (*argv, "-i") || !strcmp (*argv, "--index"))
-      { objList = parseIndexList (argv[1]) ; argc -= 2 ; argv += 2 ; }
-    else if (!strcmp (*argv, "-g") || !strcmp (*argv, "--group"))
-      { groupList = parseIndexList (argv[1]) ; argc -= 2 ; argv += 2 ; }
+    else if ((!strcmp (*argv, "-i") || !strcmp (*argv, "--index")) && argc >= 3)
+      { indexType = *argv[1] ; objList = parseIndexList (argv[2]) ; argc -= 3 ; argv += 3 ; }
     else die ("unknown option %s - run without arguments to see options", *argv) ;
 
   if (isBinary) isNoHeader = false ;
@@ -126,8 +124,14 @@ int main (int argc, char **argv)
   OneFile *vfIn = oneFileOpenRead (argv[0], vs, fileType, 1) ; /* reads the header */
   if (!vfIn) die ("failed to open one file %s", argv[0]) ;
 
-  if ((objList || groupList) && !vfIn->isBinary)
-    die ("%s is ascii - you can only access objects and groups by index in binary files", argv[0]) ;
+  if (objList)
+    { if (!vfIn->isBinary)
+	die ("%s is ascii - you can only access objects and groups by index in binary files", argv[0]) ;
+      if (!vfIn->info[(int)indexType])
+	die ("requested index type %c is not present in the schema", indexType) ;
+      if (!vfIn->info[(int)indexType]->index)
+	die ("no index for line type %c", indexType) ;
+    }
 
   if (isWriteSchema)
     { oneFileWriteSchema (vfIn, outFileName) ; }
@@ -145,33 +149,21 @@ int main (int argc, char **argv)
 	    if (vfIn->info[i]) fieldSize[i] = vfIn->info[i]->nField*sizeof(OneField) ;
       
 	  if (objList)
-	    { while (objList)
-		{ if (!oneGotoObject (vfIn, objList->i0))
-		    die ("can't locate to object %lld", objList->i0 ) ;
-		  if (!oneReadLine (vfIn))
-		    die ("can't read object %lld", objList->i0) ;
-		  while (objList->i0 < objList->iN)
-		    { transferLine (vfIn, vfOut, fieldSize) ;
-		      if (!oneReadLine (vfIn)) break ;
-		      if (vfIn->lineType == vfIn->objectType) ++objList->i0 ;
-		    }
-		  objList = objList->next ;
-		}
-	    }
-	  else if (groupList)
-	    { while (groupList)
-		{ if (!oneGotoGroup (vfIn, groupList->i0))
-		    die ("can't locate to group %lld", groupList->i0 ) ;
-		  if (!oneReadLine (vfIn))
-		    die ("can't read group %lld", groupList->i0) ;
-		  while (groupList->i0 < groupList->iN)
-		    { transferLine (vfIn, vfOut, fieldSize) ;
-		      if (!oneReadLine (vfIn)) break ;
-		      if (vfIn->lineType == vfIn->groupType) ++groupList->i0 ;
-		    }
-		  groupList = groupList->next ;
-		}
-	    }
+	    while (objList)
+	      { if (!oneGoto (vfIn, indexType, objList->i0))
+		  die ("can't locate to object %c %lld", indexType, objList->i0 ) ;
+		if (!oneReadLine (vfIn))
+		  die ("can't read object %c %lld", indexType, objList->i0) ;
+		if (objList->i0 == 0 && vfIn->lineType == indexType) ++objList->i0 ;
+		while (vfIn->lineType && objList->i0 < objList->iN) // lineType 0 is end of file
+		  { transferLine (vfIn, vfOut, fieldSize) ;
+		    oneReadLine (vfIn) ;
+		    if (vfIn->lineType == '/' && oneChar(vfIn,0) == indexType) // end of object
+		      while (oneReadLine (vfIn) && vfIn->lineType != indexType) ;
+		    if (vfIn->lineType == indexType) ++objList->i0 ;
+		  }
+		objList = objList->next ;
+	      }
 	  else
 	    while (oneReadLine (vfIn))
 	      transferLine (vfIn, vfOut, fieldSize) ;
