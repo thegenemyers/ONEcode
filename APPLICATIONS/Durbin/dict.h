@@ -19,19 +19,19 @@
 
 typedef struct {
   char* *names ;
-  int *table ;
-  int max ;			/* current number of entries */
-  int dim ;
-  int size ;			/* 2^dim = size of tables */
+  U64 *table ;
+  U64 max ;			/* current number of entries */
+  U64 dim ;
+  U64 size ;			/* 2^dim = size of tables */
 } DICT ;
 
-DICT *dictCreate (int size) ;
+DICT *dictCreate (U64 size) ;
 void dictDestroy (DICT *dict) ;
 bool dictWrite (DICT *dict, FILE *f) ; /* return success or failure */
 DICT *dictRead (FILE *f) ;	       /* return 0 on failure */
-bool dictAdd (DICT *dict, char* string, int *index) ; /* return TRUE if added, always fill index */
-bool dictFind (DICT *dict, char *string, int *index) ; /* return TRUE if found */
-char* dictName (DICT *dict, int i) ;
+bool dictAdd (DICT *dict, char* string, U64 *index) ; /* return TRUE if added, always fill index */
+bool dictFind (DICT *dict, char *string, U64 *index) ; /* return TRUE if found */
+char* dictName (DICT *dict, U64 i) ;
 
 #define dictMax(dict)  ((dict)->max)
 
