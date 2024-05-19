@@ -1,20 +1,26 @@
 # ONEcode applications from Richard Durbin
 
 This directory contains core DNA sequence utilities that interconvert
-between ONEcode and fasta and other formats, and summarise the
-properties of a sequence file:
+between ONEcode and fasta and other formats, summarise the
+properties of a sequence file, and support extract sequences from a
+sequence file.
 
 - **seqconvert** to convert between DNA file types.  This also will
   homopolymer compress (-H "hoco"), and if writing to a 1seq file
   while doing this will store the offsets in the original file of each
   new sequence base position, allowing to unhoco (-U) back to the
-  original sequence.  Because ONEcode files compress all lists, this
-  is quite space efficient
-- **composition** to give information about the data in DNA sequence
+  original sequence.  Finally, it can split a scaffold sequence into
+  contigs at blocks of n's (-K), and if writing to a 1seq file then
+  it stores the gap information in scaffold ('s') objects, and they
+  can be rejoined back to the original sequences with -J. Because
+  ONEcode files compress all lists, this is all quite space efficient.
+- **seqstat** to give information about the data in DNA sequence
   files: fasta[.gz], fastq[.gz], 1seq (if compiled with -DONEIO, as by
   default in this project), SAM/BAM/CRAM (if compiled with -DBAMIO,
   see below), and a custom binary sequence file format (now deprecated
   with 1seq preferred). 
+- **seqextract** to extract sequences or parts of sequences from any
+  type of sequence file that seqconvert or the seqio library can read.
 
 For each program, running it without any arguments gives usage
 information.
@@ -28,7 +34,8 @@ acquire new features whenever I want.
 
 ## Building
 ```
-  git clone https://github.com/richarddurbin/gaffer.git
+  git clone https://github.com/thegenemyers/ONEcode
+  cd APPLICATIONS/Durbin
   make
 ```
 
@@ -62,46 +69,7 @@ all contain the same set of 10 short sequences: small.fa (fasta
 ), small.seq (text ONEcode), small.1seq (binary ONEcode).
 
 ```
-> ONEview small.1seq            // you get (essentially) the same result with >cat small.seq
-1 3 seq 1 1
-! 4 5 seqio 3 1.0 24 ./seqconvert -1 small.fa 19 2023-07-18_17:39:10
-! 4 7 ONEview 3 0.0 18 ONEview small.1seq 19 2023-07-21_13:28:50
-.
-~ G g 2 3 INT 6 STRING    group: count, name (e.g. use for flow cell/lane grouping)
-~ O S 1 3 DNA             sequence: the DNA string
-~ D H 2 3 INT 8 INT_LIST  hoco: uncompressed seqlen, then run length for each base
-~ D I 1 6 STRING          id: (optional) sequence identifier
-~ D Q 1 6 STRING          quality: Q values (ascii string = q+33)
-.
-# I 10
-@ I 5
-+ I 41
-# S 10
-@ S 72
-+ S 577
-.
-S 51 cttagtagcgatattagttaataaaggtaaattcaaatgcgagtggtagat
-I 4 seq1
-S 72 ctttaccctccgaggctcttatccaccagaaacttccgccggggtccaggactcttaacgttcttctgtaat
-I 4 seq2
-S 58 catattctgtcgtaaatgtagaagaaagtagtagacaactcagaacgatcagaacggt
-I 4 seq3
-S 42 ttttgagcgagagagaatgataagacctcgagggagcttgaa
-I 4 seq4
-S 55 tttaaatcaaaggccgaagtttttttaagcgacaaagcactttaatatcatatag
-I 4 seq5
-S 66 agagtgaatatcattaaactagacattcacgatagaaaattagttaattatttctctttccgagta
-I 4 seq6
-S 47 gctctgtataatgtttctgttttactgtgtttgggattatgctaagc
-I 4 seq7
-S 62 ccgagatctataacagtatcaaaaataaaaaacttttaataaaatattaaaattattgaaat
-I 4 seq8
-S 53 tagaagttgtttaataagttttattcacaatcgtttaatatttacacataaaa
-I 4 seq9
-S 71 acatttacatattgatgtaacactcctatagcctttgatgaccgaaaactttaatttttaatacgagagtt
-I 5 seq10
-
-> composition -b small.1seq
+> seqstat -b small.fa
 onecode file, 10 sequences >= 0, 577 total, 57.70 average, 42 min, 72 max
 bases
   a 202 35.0 %
@@ -109,7 +77,9 @@ bases
   g 98 17.0 %
   t 189 32.8 %
   
->composition -l small.fa
+>seqconvert -1 small.fa > small.1seq
+  
+>composition -l small.1seq
 fasta file, 10 sequences >= 0, 577 total, 57.70 average, 42 min, 72 max
 approximate N50 60
 length distribution (quadratic bins)
@@ -163,6 +133,12 @@ acatacatatgatgtacactctatagctgatgacgactatatacgagagt
 
 > seqconvert -U -o C.fa B.1seq
 > diff C.fa small.fa
+
+> ./seqextract -fa -f seq6 -c 3:10-20 small.1seq
+>seq3:10-20
+cgtaaatgta
+>seq6:0-66
+agagtgaatatcattaaactagacattcacgatagaaaattagttaattatttctctttccgagta
 
 ```
 With larger data sets the 1seq files are not only smaller than compressed fasta, they also read much faster because parsing is trivial (composition reads in each sequence, even though the basic counts are available in the 1seq header).
