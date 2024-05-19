@@ -2,10 +2,10 @@
 
 DEST_DIR = ~/bin
 
-#CFLAGS= -O3 -Wall -fPIC -Wextra -Wno-unused-result -fno-strict-aliasing -DNDEBUG # NDEBUG drops asserts
-CFLAGS= -g -Wall -Wextra -fno-strict-aliasing  # for debugging
+CFLAGS = -O3 -Wall -fPIC -Wextra -Wno-unused-result -fno-strict-aliasing -DNDEBUG # NDEBUG drops asserts
+#CFLAGS = -g -Wall -Wextra -fno-strict-aliasing  # for debugging
 
-CCPP=g++
+CCPP = g++
 
 LIB = libONE.a
 PROGS = ONEstat ONEview
@@ -38,7 +38,7 @@ $(LIB): $(LIB_OBJS)
 ONEstat: ONEstat.c utils.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^
 
-ONEview: ONEview.c utils.o $(LIB)
+ONEview: ONEview.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^
 
 ### test
