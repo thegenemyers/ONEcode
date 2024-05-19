@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Mar 10 22:36 2024 (rd109)
+ * Last edited: May 15 00:29 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -70,8 +70,6 @@ typedef struct
   { I64 count;
     I64 max;
     I64 total;
-    I64 groupCount;
-    I64 groupTotal;
   } OneCounts;
 
   // OneCodecs are a private package for binary one file compression
@@ -88,12 +86,20 @@ extern  OneCodec *DNAcodec;
   // Record for a particular line type.  There is at most one list element.
 
 typedef struct
-  { OneCounts accum;            // counts read or written to this moment
+{   bool      isObject;         // set if this is an object type (O in schema)
+    bool      isGroup;          // set if this is a group type (G in schema)
+    bool      isInGroup;        // set at start of a group, unset at "/ t" lines
+    I64      *index;            // if an object type O or group type G, index of byte offsets
+    I64       gCount0[128];     // if a group, the count of indexed type i up to group 1
+    I64       gTotal0[128];     // if a group, the total of list type i up to group 1
+    I64       gCount[128];      // if a group, the count of indexed type i at start of current group
+    I64       gTotal[128];      // if a group, the total of list type i at start of current group
+    I64       gMaxCount[128];   // if a group, largest value of gCount
+    I64       gMaxTotal[128];   // if a group, largest value of gTotal
+    I64       indexSize;        // size of all the above arrays, if they are not NULL
+
+    OneCounts accum;            // counts read or written to this moment
     OneCounts given;            // counts read from header
-    I64       gCount;           // used internally to calculate groupCount and groupTotal
-    I64       gTotal;
-    I64       oCount;           // # of objects in prefix before first group (if any)
-    I64       oTotal;           // + of objects in prefix (these 2 are for thread parallel apps)
 
     int       nField;           // number of fields
     OneType  *fieldType;        // type of each field
@@ -119,10 +125,10 @@ typedef struct OneSchema
     char      *primary ;
     int        nSecondary ;
     char     **secondary ;
-    OneInfo   *info[128] ;
     int        nFieldMax ;
-    char       objectType ;
-    char       groupType ;
+    OneInfo   *info[128] ;
+    int        nDefn ;          // number of G,O,D definition lines			    
+    int        defnOrder[128] ; // so can write out G,O,D lines in same order they were given
     struct OneSchema *nxt ;
   } OneSchema ;
 
@@ -144,17 +150,15 @@ typedef struct
     char          *fileType;
     char          *subType;
     char           lineType;           // current lineType
-    char           objectType;         // line designation character for primary objects
-    char           groupType;          // line designation character for groups (optional)
     I64            line;               // current line number
     I64            byte;               // current byte position when writing binary
-    I64            object;             // current object - incremented when object line read
-    I64            group;              // current group - incremented when group line read
     OneProvenance *provenance;         // if non-zero then count['!'] entries
     OneReference  *reference;          // if non-zero then count['<'] entries
     OneReference  *deferred;           // if non-zero then count['>'] entries
     OneField      *field;              // used to hold the current line - accessed by macros
     OneInfo       *info[128];          // all the per-linetype information
+    int            nDefn;              // number of G,O,D definition lines			    
+    int            defnOrder[128];     // so can write out G,O,D lines in same order they were given
     I64            codecTrainingSize;  // amount of data to see before building codec
 
     // fields below here are private to the package
@@ -166,7 +170,6 @@ typedef struct
     bool   isBinary;               // true if writing a binary file
     bool   inGroup;                // set once inside a group
     bool   isLastLineBinary;       // needed to deal with newlines on ascii files
-    bool   isIndexIn;              // index read in
     bool   isBig;                  // are we on a big-endian machine?
     bool   isNoAsciiHeader;        // backdoor for ONEview to avoid writing header in ascii
 
@@ -199,23 +202,23 @@ typedef struct
 OneSchema *oneSchemaCreateFromFile (const char *path) ;
 OneSchema *oneSchemaCreateFromText (const char *text) ;
 
-  // These functions create a schema handle that can be used to open One-code data files 
-  //   for reading and writing.  A schema file is itself a One-code file, consisting of
+  // These functions create a schema handle that can be used to open ONEcode data files 
+  //   for reading and writing.  A schema file is itself a ONEcode file, consisting of
   //   a set of objects, one per primary file type.  Valid lines in this file are:
   //      P <primary file type>   // a short string
   //      S <secondary file type> // a short string - any number of these
-  //      O <char> <field_list>   // definition of object type
-  //      G <char> <field_list>   // definition of group type - first field must be an int
-  //      D <char> <field_list>   // definition of line
-  //   <char> must be a lower or upper case letter.  By convention upper case letters are used
+  //      O <char> <field_list>   // definition of object type - these are indexed
+  //      G <char> <field_list>   // definition of group type - indexed and accumulate stats
+  //      D <char> <field_list>   // definition of normal line type
+  //   <char> must be a lower or upper case letter. By convention upper case letters are used
   //      for objects and records within objects, and lower case letters for groups and records not
   //      assigned to objects, including global and group information.
   //   <field_list> is a list of field types from:
   //      CHAR, INT, REAL, STRING, INT_LIST, REAL_LIST, STRING_LIST, DNA
   //      Only one list type (STRING, *_LIST or DNA) is allowed per line type.
-  //   All the D lines following an O line apply to that object type.
-  //   By convention comments on each line explain the definition.
-  //   Example, with lists and strings preceded by their length in OneCode style
+  //   All the D lines following an O line apply to that object.
+  //   By convention comments on each schema definition line explain the definition.
+  //   Example, with lists and strings preceded by their length as required in ONEcode
   //      P 3 seq                            this is a sequence file
   //      O S 1 3 DNA                        the DNA sequence - each S line starts an object
   //      D Q 1 6 STRING                     the phred encoded quality score + ASCII 33
@@ -262,7 +265,7 @@ bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema) ;
   // e.g. if (!oneFileCheckSchemaText (vf, "P 3 seq\nD S 1 3 DNA\nD Q 1 6 STRING\nD P 0\n")) die () ;
   // This is provided to enable a program to ensure that its assumptions about data layout
   // are satisfied.
-  // This is used by oneFileOpenRead() with isRequired false to check consistency.
+  // It is also used by oneFileOpenRead() with isRequired false to check consistency.
 
 char oneReadLine (OneFile *vf) ;
 
@@ -375,14 +378,11 @@ void oneUserBuffer (OneFile *vf, char lineType, void *buffer);
   //   (if any) is freed.  The user must ensure that a buffer they supply is large
   //   enough. BTW, this buffer is overwritten with each new line read of the given type.
 
-bool oneGotoObject (OneFile *vf, I64 i);
+bool oneGoto (OneFile *vf, char lineType, I64 i);
 
-  // Goto i'th object in the file. This only works on binary files, which have an index.
-
-I64  oneGotoGroup  (OneFile *vf, I64 i);
-
-  // Goto the first object in group i. Return the size (in objects) of the group, or 0
-  //   if an error (i out of range or vf has not group type). Only works for binary files.
+  // Goto i'th object (group) in the file. This only works on binary files, which have an index.
+  // The first object (group) is numbered 1. Setting i == 0 goes to the first data line of the file
+  // after the header.
 
 /***********************************************************************************
  *
@@ -402,8 +402,8 @@ I64  oneGotoGroup  (OneFile *vf, I64 i);
  // The ASCII prolog contains the type, subtype, provenance, reference, and deferred lines
  //   in the ASCII format.  The ONE count statistic lines for each data line type are found
  //   in the footer along with binary ';' and ':' lines that encode their compressors as
- //   needed.  The footer also contains binary '&' and '*' lines that encode the object index
- //   and group indices, respectively.
+ //   needed.  The footer also contains binary '&' lines that encode the byte index for object
+ //   and group types, '*' lines that encode group counts, and ':' lines that encode group totals.
  //
  //   <Binary line> <- <Binary line code + tags> <fields> [<list data>]
  //
