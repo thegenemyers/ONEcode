@@ -2,11 +2,11 @@
 
 DESTDIR = ~/bin
 
-#CFLAGS = -O3
-CFLAGS = -g				# for debugging
+CFLAGS = -O3 -I../..
+#CFLAGS = -g -I../..			# for debugging
 #CFLAGS = -03 -DOMP -fopenmp		# for OMP parallelisation - doesn't compile on Mac
 
-ALL = seqconvert composition
+ALL = seqconvert seqextract seqstat
 
 all: $(ALL)
 
@@ -19,7 +19,7 @@ clean:
 
 ### object files
 
-ONElib.o: ONElib.c ONElib.h 
+ONElib.o: ../../ONElib.c ../../ONElib.h 
 	$(CC) $(CFLAGS) -c $^
 
 UTILS_OBJS=hash.o dict.o array.o utils.o
@@ -37,7 +37,10 @@ seqio.o: seqio.c seqio.h
 seqconvert: seqconvert.c seqio.o ONElib.o $(UTILS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
 
-composition: composition.c seqio.o ONElib.o $(UTILS_OBJS)
+seqextract: seqextract.c seqio.o ONElib.o $(UTILS_OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
+
+seqstat: seqstat.c seqio.o ONElib.o $(UTILS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
 
 ### end of file
