@@ -5,7 +5,7 @@
  * Description: core utility functions
  * Exported functions:
  * HISTORY:
- * Last edited: May 11 02:19 2020 (rd109)
+ * Last edited: May 14 22:36 2024 (rd109)
  * * Feb 22 14:52 2019 (rd109): added fzopen()
  * Created: Thu Aug 15 18:32:26 1996 (rd)
  *-------------------------------------------------------------------
@@ -65,7 +65,8 @@ char *fgetword (FILE *f)
 	  }
       }
     else
-      { while ((*cp = getc (f)) && (isspace(*cp) || !isgraph(*cp)) && *cp != '\n' && !feof(f)) ;
+      { while ((*cp = getc (f)) && (isspace(*cp) || !isgraph(*cp)))
+	  if (*cp == '\n' || feof(f)) break ;
 	ungetc (*cp, f) ;
 	break ;
       }
