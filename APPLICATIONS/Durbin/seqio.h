@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: May 29 13:23 2023 (rd109)
+ * Last edited: May 19 23:26 2024 (rd109)
  * * Dec 20 23:23 2022 (rd109): fully revised SeqPack and QualPack
  * Created: Sat Nov 10 08:51:49 2018 (rd109)
  *-------------------------------------------------------------------
@@ -77,7 +77,7 @@ typedef struct {
   QualPack *qualPack ;
 } SeqIO ;
 
-/* Reads/writes FASTA or FASTQ, gzipped or not, ONEseq, SAM/BAM/CRAM and a custom packed binary */
+/* Reads/writes FASTA or FASTQ, gzipped or not, ONEseq, SAM/BAM/CRAM and a custom packed binary. */
 /* Philosophy here is to read blocks of 8Mb and provide direct access into the buffer. */
 /* So the user does not own the pointers. */
 /* Add 0 terminators to ids.  Convert sequences in place if convert != 0, and quals if isQual. */
@@ -96,6 +96,20 @@ void seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *q
 void seqIOflush (SeqIO *si) ;	/* NB writes are buffered, so need this to ensure in file */
 
 void seqIOclose (SeqIO *si) ;	/* will flush file opened for writing */
+
+/* For ONEcode files, instead of seqio opening the file you can pass the OneCode handle. */
+/* The handle must have primary type seq and support at least this schema (it can contain more). */
+
+static char *seqioSchemaText =
+  "1 3 def 1 0  schema for seqio\n"
+  ".\n"
+  "P 3 seq SEQUENCE\n"
+  "O S 1 3 DNA             sequence: the DNA string\n"
+  "D I 1 6 STRING          id: (optional) sequence identifier\n"
+  "D Q 1 6 STRING          quality: Q values (ascii string = q+33)\n"
+  "D N 2 3 INT 4 CHAR      non-acgt base\n" ;
+
+SeqIO *seqIOadoptOneFile (void *handle, int* convert, int qualThresh) ;
 
 /* utility */
 
@@ -117,6 +131,7 @@ extern int aa2indexConv[] ;
 static const char index2aa[] = "ACDEFGHIKLMNPQRSTVWYX*" ;
 extern int noConv[] ;
 extern int complementBase[] ; /* complements both index and text with ambiguity, not binary */
+extern int acgtCheck[] ;      /* 1 if acgtACGT, else 0 */
 
 #endif	/* SEQIO_DEFINED */
 
