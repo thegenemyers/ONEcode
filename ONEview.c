@@ -5,28 +5,35 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Apr 30 23:43 2024 (rd109)
+ * Last edited: May 15 02:29 2024 (rd109)
+ * * May 15 02:26 2024 (rd109): incorporate rd utilities so stand alone
  * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *-------------------------------------------------------------------
  */
 
-#include "utils.h"
 #include "ONElib.h"
 
 #include <assert.h>
 
 #include <string.h>		/* strcmp etc. */
 #include <stdlib.h>		/* for exit() */
+#include <stdarg.h>             /* for variable length argument lists */
 
-static char *commandLine (int argc, char **argv)
-{
-  int i, totLen = 0 ;
-  for (i = 0 ; i < argc ; ++i) totLen += 1 + strlen(argv[i]) ;
-  char *buf = new (totLen, char) ;
-  strcpy (buf, argv[0]) ;
-  for (i = 1 ; i < argc ; ++i) { strcat (buf, " ") ; strcat (buf, argv[i]) ; }
-  return buf ;
-}
+// forward declarations of utilities at end of file from RD's utils.[ch]
+
+void die (char *format, ...) ;
+char *commandLine (int argc, char **argv) ;
+
+void *myalloc (size_t size) ;
+void *mycalloc (size_t number, size_t size) ;
+#define	new(n,type)	(type*)myalloc((n)*sizeof(type))
+#define	new0(n,type)	(type*)mycalloc((n),sizeof(type))
+#define resize(x,nOld,nNew,T) { T* z = new((nNew),T) ; if (nOld < nNew) memcpy(z,x,(nOld)*sizeof(T)) ; else memcpy(z,x,(nNew)*sizeof(T)) ; free(x) ; x = z ; }
+
+void timeUpdate (FILE *f) ;	/* print time usage since last call to file */
+void timeTotal (FILE *f) ;	/* print full time usage since first call to timeUpdate */
+
+// end of utils declarations
 
 typedef struct IndexListStruct {
   I64 i0, iN ;
@@ -179,5 +186,124 @@ int main (int argc, char **argv)
 
   exit (0) ;
 }
+
+
+/*********** utilities from RD's utils.[ch] ***************/
+
+void die (char *format, ...)
+{
+  va_list args ;
+
+  va_start (args, format) ;
+  fprintf (stderr, "FATAL ERROR: ") ;
+  vfprintf (stderr, format, args) ;
+  fprintf (stderr, "\n") ;
+  va_end (args) ;
+
+  exit (-1) ;
+}
+
+char *commandLine (int argc, char **argv)
+{
+  int i, totLen = 0 ;
+  for (i = 0 ; i < argc ; ++i) totLen += 1 + strlen(argv[i]) ;
+  char *buf = new (totLen, char) ;
+  strcpy (buf, argv[0]) ;
+  for (i = 1 ; i < argc ; ++i) { strcat (buf, " ") ; strcat (buf, argv[i]) ; }
+  return buf ;
+}
+
+long totalAllocated = 0 ;
+
+void *myalloc (size_t size)
+{
+  void *p = (void*) malloc (size) ;
+  if (!p) die ("myalloc failure requesting %d bytes - totalAllocated %ld", size, totalAllocated) ;
+  totalAllocated += size ;
+  return p ;
+}
+
+void *mycalloc (size_t number, size_t size)
+{
+  void *p = (void*) calloc (number, size) ;
+  if (!p) die ("mycalloc failure requesting %d objects of size %d - totalAllocated %ld", number, size, totalAllocated) ;
+  totalAllocated += size*number ;
+  return p ;
+}
+
+/***************** rusage for timing information ******************/
+
+#include <sys/resource.h>
+#include <sys/time.h>
+#ifndef RUSAGE_SELF     /* to prevent "RUSAGE_SELF redefined" gcc warning, fixme if this is more intricate */
+#define RUSAGE_SELF 0
+#endif
+
+#ifdef RUSAGE_STRUCTURE_DEFINITIONS
+struct rusage {
+  struct timeval ru_utime; /* user time used */
+  struct timeval ru_stime; /* system time used */
+  long ru_maxrss;          /* integral max resident set size */
+  long ru_ixrss;           /* integral shared text memory size */
+  long ru_idrss;           /* integral unshared data size */
+  long ru_isrss;           /* integral unshared stack size */
+  long ru_minflt;          /* page reclaims */
+  long ru_majflt;          /* page faults */
+  long ru_nswap;           /* swaps */
+  long ru_inblock;         /* block input operations */
+  long ru_oublock;         /* block output operations */
+  long ru_msgsnd;          /* messages sent */
+  long ru_msgrcv;          /* messages received */
+  long ru_nsignals;        /* signals received */
+  long ru_nvcsw;           /* voluntary context switches */
+  long ru_nivcsw;          /* involuntary context switches */
+};
+
+struct timeval {
+  time_t       tv_sec;   /* seconds since Jan. 1, 1970 */
+  suseconds_t  tv_usec;  /* and microseconds */
+} ;
+#endif /* RUSAGE STRUCTURE_DEFINITIONS */
+
+static struct rusage rOld, rFirst ;
+static struct timeval tOld, tFirst ;
+
+void timeUpdate (FILE *f)
+{
+  static bool isFirst = 1 ;
+  struct rusage rNew ;
+  struct timeval tNew ;
+  int secs, usecs ;
+
+  getrusage (RUSAGE_SELF, &rNew) ;
+  gettimeofday(&tNew, 0) ;
+  if (!isFirst)
+    { secs = rNew.ru_utime.tv_sec - rOld.ru_utime.tv_sec ;
+      usecs =  rNew.ru_utime.tv_usec - rOld.ru_utime.tv_usec ;
+      if (usecs < 0) { usecs += 1000000 ; secs -= 1 ; }
+      fprintf (f, "user\t%d.%06d", secs, usecs) ;
+      secs = rNew.ru_stime.tv_sec - rOld.ru_stime.tv_sec ;
+      usecs =  rNew.ru_stime.tv_usec - rOld.ru_stime.tv_usec ;
+      if (usecs < 0) { usecs += 1000000 ; secs -= 1 ; }
+      fprintf (f, "\tsystem\t%d.%06d", secs, usecs) ;
+      secs = tNew.tv_sec - tOld.tv_sec ;
+      usecs =  tNew.tv_usec - tOld.tv_usec ;
+      if (usecs < 0) { usecs += 1000000 ; secs -= 1 ; }
+      fprintf (f, "\telapsed\t%d.%06d", secs, usecs) ;
+      fprintf (f, "\tallocated\t%.2f", totalAllocated/1000000000.0) ;   
+      fprintf (f, "\tmax_RSS\t%ld", rNew.ru_maxrss - rOld.ru_maxrss) ;
+      fputc ('\n', f) ;
+    }
+  else
+    { rFirst = rNew ;
+      tFirst = tNew ;
+      isFirst = false ;
+    }
+
+  rOld = rNew ;
+  tOld = tNew ;
+}
+
+void timeTotal (FILE *f) { rOld = rFirst ; tOld = tFirst ; timeUpdate (f) ; }
 
 /********************* end of file ***********************/

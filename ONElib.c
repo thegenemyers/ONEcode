@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: May  7 00:38 2024 (rd109)
+ * Last edited: May 19 08:32 2024 (rd109)
  * * May  1 00:23 2024 (rd109): removed vf->line updating on write - only useful when reading
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * May  1 00:22 2024 (rd109): added '/ T' for ending groups or objects of type T
@@ -115,11 +115,6 @@ static OneInfo *infoDeepCopy (OneInfo *vi0)
   if (vi0->listCodec && vi->listCodec != DNAcodec) vi->listCodec = vcCreate() ;
   if (vi0->comment) vi->comment = strdup (vi0->comment) ;
   if (vi0->index) vi->index = dup (vi->indexSize, vi0->index, I64) ;
-  int i ;
-  for (i = 0 ; i < 128 ; ++i)
-    if (vi0->gCount[i]) vi->gCount[i] = dup (vi->indexSize,vi0->gCount[i],I64) ;
-  for (i = 0 ; i < 128 ; ++i)
-    if (vi0->gTotal[i]) vi->gTotal[i] = dup (vi->indexSize,vi0->gTotal[i],I64) ;
   return vi ;
 }
 
@@ -129,9 +124,6 @@ static void infoDestroy (OneInfo *vi)
   if (vi->fieldType) free (vi->fieldType) ;
   if (vi->comment) free (vi->comment) ;
   if (vi->index) free (vi->index) ;
-  int i ;
-  for (i = 0 ; i < 128 ; ++i) if (vi->gCount[i]) free (vi->gCount[i]) ;
-  for (i = 0 ; i < 128 ; ++i) if (vi->gTotal[i]) free (vi->gTotal[i]) ;
   free (vi);
 }
 
@@ -181,11 +173,9 @@ static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, ch
   else if (t >= 'a' && t <= 'z') vi->binaryTypePack = ((26+t-'a') << 1) | (char) 0x80 ;
   else if (t == ';') vi->binaryTypePack = (52 << 1) | (char) 0x80 ; // list codec
   else if (t == '&') vi->binaryTypePack = (53 << 1) | (char) 0x80 ; // byte index
-  else if (t == '*') vi->binaryTypePack = (54 << 1) | (char) 0x80 ; // group counts
-  else if (t == ':') vi->binaryTypePack = (55 << 1) | (char) 0x80 ; // group totals
-  else if (t == '|') vi->binaryTypePack = (56 << 1) | (char) 0x80 ; // comment - binary only
-  else if (t == '.') vi->binaryTypePack = (57 << 1) | (char) 0x80 ; // blank line
-  else if (t == '/') vi->binaryTypePack = (58 << 1) | (char) 0x80 ; // end of group
+  else if (t == '|') vi->binaryTypePack = (54 << 1) | (char) 0x80 ; // comment - binary only
+  else if (t == '.') vi->binaryTypePack = (55 << 1) | (char) 0x80 ; // blank line
+  else if (t == '/') vi->binaryTypePack = (56 << 1) | (char) 0x80 ; // end of object/group
   // don't need for #, +, @, % because these lines are always written in ASCII
 }
 
@@ -329,8 +319,6 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   fprintf (vf->f, "D ^ 0                              binary file: end of footer designation\n") ;
   fprintf (vf->f, "D - 1 3 INT                        binary file: offset of start of footer\n") ;
   fprintf (vf->f, "D & 2 4 CHAR 8 INT_LIST            binary file: li->index\n") ;
-  fprintf (vf->f, "D * 3 4 CHAR 4 CHAR 8 INT_LIST     binary file: li->gCount\n") ;
-  fprintf (vf->f, "D : 3 4 CHAR 4 CHAR 8 INT_LIST     binary file: li->gTotal\n") ;
   fprintf (vf->f, "D ; 2 4 CHAR 6 STRING              binary file: list codec\n") ;
   fprintf (vf->f, "D | 1 6 STRING                     binary file: comment\n") ;
   fprintf (vf->f, "D / 1 4 CHAR                       general: end of group, char is type\n") ;
@@ -392,12 +380,13 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
   FILE *f = fopen (template, "w") ;
   if (!f) die ("failed to open temporary file %s for writing schema to", template) ;
   char *fixedText = schemaFixNewlines (text) ;
-  while (*fixedText && *fixedText != 'P')
-    { while (*fixedText && *fixedText != '\n') ++fixedText ;
-      if (*fixedText == '\n') ++fixedText ;
+  char *s = fixedText ;
+  while (*s && *s != 'P')
+    { while (*s && *s != '\n') ++s ;
+      if (*s == '\n') ++s ;
     }
-  if (!*fixedText) die ("no P line in schema text") ;
-  fprintf (f, "%s\n", fixedText) ;
+  if (!*s) die ("no P line in schema text") ;
+  fprintf (f, "%s\n", s) ;
   free (fixedText) ;
   fclose (f) ;
   if (errno) die ("failed to write temporary file %s errno %d\n", template, errno) ;
@@ -500,7 +489,15 @@ static OneFile *oneFileCreate (OneSchema **vsp, const char *type)
   char       *secondary = 0 ;
   OneSchema  *vs = *vsp ;
 
-  // fprintf (stderr, "oneFileCreate vs %lx type %s\n", (unsigned long)vs, type) ;
+  { static bool isFirst = true ;
+    if (isFirst)
+      { if (sizeof(I64) != 8) die ("ONElib compile error: sizeof(I64) = %d != 8", sizeof(I64)) ;
+        if (sizeof(I32) != 4) die ("ONElib compile error: sizeof(I32) = %d != 4", sizeof(I32)) ;
+        if (sizeof(I16) != 2) die ("ONElib compile error: sizeof(I16) = %d != 2", sizeof(I16)) ;
+        if (sizeof(I8) != 1) die ("ONElib compile error: sizeof(I8) = %d != 1", sizeof(I8)) ;
+        isFirst = false ;
+      }
+  }
   
   // transfer header info
   for (i = 0 ; i < 128 ; ++i)
@@ -598,6 +595,7 @@ static void oneFileDestroy (OneFile *vf)
                 { li = vf[j].info[i];
 		  if (li != lx) // the index OneInfos are shared
 		    { if (li->listCodec == lx->listCodec) li->listCodec  = NULL;
+		      if (li->index == lx->index) li->index = NULL ;
 		      infoDestroy(li);
 		    }
 		}
@@ -799,39 +797,6 @@ static inline void updateTotalAndBuffer (OneFile *vf, char t, I64 size, I64 nStr
       li->bufSize = size + 0x10000 ;
       li->buffer  = new (li->bufSize*li->listEltSize, void);
     }
-}
-
-  //  Called when group ends, explicitly with / or when a new group starts or at eof
-  //  Accumulate group counts, totals, max
-
-static inline void updateGroupStats (OneFile *vf, OneInfo *li, bool isGroupLine)
-{ int        j,k;
-  OneInfo   *lj;
-
-  int n = li->accum.count ; // index of the current group
-  for (k = 0 ; k < vf->nDefn ; ++k)
-    { j = vf->defnOrder[k] ;
-      lj = vf->info[j] ;
-      if (lj != li)
-	{ if (lj->index)
-	    { if (li->isInGroup)
-		{ li->gCount[j][n] = lj->accum.count - li->gCount[j][n] ;
-		  if (li->gCount[j][n] > li->gMaxCount[j]) li->gMaxCount[j] = li->gCount[j][n] ;
-		}
-	      if (isGroupLine) li->gCount[j][n+1] = lj->accum.count ;
-	    }
-	  if (lj->listEltSize > 0)
-	    { if (li->isInGroup)
-		{ li->gTotal[j][n] = lj->accum.total - li->gTotal[j][n] ;
-		  if (li->gTotal[j][n] > li->gMaxTotal[j]) li->gMaxTotal[j] = li->gTotal[j][n] ;
-		}
-	      if (isGroupLine) li->gTotal[j][n+1] = lj->accum.total ;
-	    }
-	}
-    }
-  
-  if (isGroupLine) li->isInGroup = true ;
-  else li->isInGroup = false ;
 }
 
 /***********************************************************************************
@@ -1041,7 +1006,6 @@ char oneReadLine (OneFile *vf)
     parseError (vf, "unknown line type %c (%d was %d) line %d", t, t, x, (int)vf->line);
   if (li->accum.count >= 0) // after goto set to -1 for unindexed linetypes - can't know the count
     li->accum.count += 1;   // includes update of indexed type counts
-  // if (li->isGroup) updateGroupStats (vf, li, true) ; // don't need this on read
 
   if (vf->info['|']->bufSize) // clear the comment buffer
     *(char*)(vf->info['|']->buffer) = 0 ;
@@ -1301,6 +1265,11 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
       if (peek & 0x80)
         peek = vf->binaryTypeUnpack[peek];
 
+      if (peek == '&')
+	{ vf->info['&']->bufSize = maxIndexSize ; // make the buffer to read in the indexes
+	  vf->info['&']->buffer  = new (maxIndexSize, I64) ;
+	}
+
       if (isalpha(peek) || peek == '\n')  // '\n' to check for end of binary file, i.e. empty file
         break;    // loop exit at standard data line
 
@@ -1308,7 +1277,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	{ fprintf (stderr,
 		   "ONEcode file open error %s: if header exists it must begin with '1' line\n",
 		   path) ;
-	  fclose (vf->f) ;
 	  oneFileDestroy (vf) ;
 	  return 0 ;
 	}
@@ -1377,18 +1345,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 		  { li->indexSize = li->given.count + 1 ; // +1 because 1..n
 		    li->index = new (li->indexSize, I64) ;
 		    if (li->indexSize > maxIndexSize) maxIndexSize = li->indexSize ;
-		    if (li->isGroup)
-		      { int j ;
-			for (j = 'A' ; j <= 'z' ; ++j)
-			  { OneInfo *lj = vf->info[j] ;
-			    if (lj)
-			      { if (lj->isObject || lj->isGroup)
-				  li->gCount[j] = new(li->indexSize, I64) ;
-				if (lj->listEltSize > 0)
-				  li->gTotal[j] = new(li->indexSize, I64) ;
-			      }
-			  }
-		      }
 		  }
                 break;
               case '@':
@@ -1453,13 +1409,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
           if (fseeko (vf->f, footOff, SEEK_SET) != 0)
             die ("ONE file error: can't seek to start of footer");
 
-	  vf->info['&']->bufSize = maxIndexSize ; // make the buffers to read in the indexes
-	  vf->info['&']->buffer  = new (maxIndexSize, I64) ;
-	  vf->info['*']->bufSize = maxIndexSize ;
-	  vf->info['*']->buffer  = new (maxIndexSize, I64) ;
-	  vf->info[':']->bufSize = maxIndexSize ;
-	  vf->info[':']->buffer  = new (maxIndexSize, I64) ;
-
           break;
 
         case '^':    // end of footer - return to where we jumped from header
@@ -1476,26 +1425,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	  }
           break;
 
-        case '*': // read gCount[j]
-	  { char c = oneChar(vf,0) ;
-	    OneInfo *li = vf->info[(int)c] ;
-	    assert (li->indexSize == oneLen(vf)) ;
-	    int j = oneChar(vf,1) ;
-	    assert (li->gCount[j]) ;
-	    memcpy (li->gCount[j], oneIntList(vf), oneLen(vf)*sizeof(I64)) ;
-	  }
-          break;
-
-        case ':': // read gTotal[j]
-	  { char c = oneChar(vf,0) ;
-	    OneInfo *li = vf->info[(int)c] ;
-	    assert (li->indexSize == oneLen(vf)) ;
-	    int j = oneChar(vf,1) ;
-	    assert (li->gTotal[j]) ;
-	    memcpy (li->gTotal[j], oneIntList(vf), oneLen(vf)*sizeof(I64)) ;
-	  }
-          break;
-
         case ';':
           vf->info[(int) oneChar(vf,0)]->listCodec = vcDeserialize (oneString(vf));
           break;
@@ -1509,7 +1438,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 
   if (!isBareFile && vsArg && !oneFileCheckSchema (vf, vsArg, false)) // check schema intersection
     { fprintf (stderr, "ONEcode file open error %s: schema mismatch to code requirement\n", path) ;
-      fclose (vf->f) ;
       oneFileDestroy (vf) ;
       return NULL ;
     }
@@ -1579,14 +1507,8 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 		    { li->isGroup = true ;
 		      int k ;
 		      for (k = 'A' ; k < 'z' ; ++k)
-			{ if (l0->gCount[k])
-			    { li->gCount[k]    = l0->gCount[k] ;
-			      li->gMaxCount[k] = l0->gMaxCount[k] ;
-			    }
-			  if (l0->gTotal[k])
-			    { li->gTotal[k]    = l0->gTotal[k] ;
-			      li->gMaxTotal[k] = l0->gMaxTotal[k] ;
-			    }
+			{ if (l0->gMaxCount[k]) li->gMaxCount[k] = l0->gMaxCount[k] ;
+			  if (l0->gTotal[k]) li->gMaxTotal[k] = l0->gMaxTotal[k] ;
 			}
 		    }
 		}
@@ -1695,21 +1617,6 @@ static inline void allocateIndices (OneFile *vf, int i, I64 size)
     { li->indexSize = size ;
       if (li->index) free(li->index) ;
       li->index = new (size, I64) ;
-      if (li->isGroup)
-	{ int jj ;
-	  for (jj = 0 ; jj < vf->nDefn ; ++jj)
-	    { int j = vf->defnOrder[jj] ;
-	      OneInfo *lj = vf->info[j] ;
-	      if (lj->isObject || lj->isGroup)
-		{ if (li->gCount[j]) free (li->gCount[j]) ;
-		  li->gCount[j] = new(size, I64) ;
-		}
-	      if (lj->listEltSize)
-		{ if (li->gTotal[j]) free (li->gTotal[j]) ;
-		  li->gTotal[j] = new(size, I64) ;
-		}
-	    }
-	}
     }
 }
 
@@ -1805,8 +1712,7 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   OneFile *vf = oneFileOpenWriteNew (path, vs0, vfIn->subType ? vfIn->subType : vfIn->fileType,
 				     isBinary, nthreads);
   oneSchemaDestroy (vs0) ;
-  if (!vf)
-    return NULL ;
+  if (!vf) return NULL ;
 
   oneInheritProvenance (vf, vfIn);
   oneInheritReference  (vf, vfIn);
@@ -1821,7 +1727,7 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   // set info[]->given, and resize codecBuf accordingly
   I64 size = vf->codecBufSize;
   for (i = 0; i < 128 ; ++i)
-    if (vf->info[i])
+    if (vf->info[i] && vfIn->info[i]->given.count)
       { OneInfo *vi = vf->info[i];
 	vi->given = vfIn->info[i]->given ;
 	if (vi->listCodec)
@@ -2145,6 +2051,41 @@ static int writeStringList (OneFile *vf, char t, int len, char *buf)
   return nByteWritten ;
 }
 
+  //  Called when group ends, explicitly with / or when a new group starts or at eof
+  //  Update group maxCount, maxTotal
+
+static inline void updateGroupStats (OneFile *vf, OneInfo *li, bool isGroupLine)
+{ int        j,k;
+  OneInfo   *lj;
+
+  int n = li->accum.count ; // index of the current group
+  for (k = 0 ; k < vf->nDefn ; ++k)
+    { j = vf->defnOrder[k] ;
+      lj = vf->info[j] ;
+      if (lj != li)
+	{ if (lj->index)
+	    { if (li->isInGroup && (lj->accum.count - li->gCount[j] > li->gMaxCount[j]))
+		li->gMaxCount[j] = lj->accum.count - li->gCount[j] ;
+	      if (isGroupLine)
+		{ li->gCount[j] = lj->accum.count ;
+		  if (n == 0) li->gCount0[j] = li->gCount[j] ;
+		}
+	    }
+	  if (lj->listEltSize > 0)
+	    { if (li->isInGroup && (lj->accum.total - li->gTotal[j] > li->gMaxTotal[j]))
+		li->gMaxTotal[j] = lj->accum.total - li->gTotal[j] ;
+	      if (isGroupLine)
+		{ li->gTotal[j] = lj->accum.total ;
+		  if (n == 0) li->gTotal0[j] = li->gTotal[j] ;
+		}
+	    }
+	}
+    }
+  
+  if (isGroupLine) li->isInGroup = true ;
+  else li->isInGroup = false ;
+}
+
 // process is to fill fields by assigning to macros, then call - list contents are in buf
 // NB in ASCII mode adds '\n' before writing line not after, so oneWriteComment() can add to line
 // first call will write initial header
@@ -2199,34 +2140,12 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
       if (li->isObject || li->isGroup) // update index
 	{ if (li->accum.count >= li->indexSize)
 	    { I64 oldSize = li->indexSize ;
-	      li->indexSize = (li->indexSize << 2) + 0x10000 ;
+	      li->indexSize = (oldSize << 2) + 0x10000 ;
 	      resize (li->index, oldSize, li->indexSize, I64) ;
-	      if (li->isGroup)
-		for (j = 0 ; j < vf->nDefn ; ++j)
-		  { if (li->gCount[j]) resize (li->gCount[j], oldSize, li->indexSize, I64) ;
-		    if (li->gTotal[j]) resize (li->gTotal[j], oldSize, li->indexSize, I64) ;
-		  }
 	    }
 	  li->index[li->accum.count] = vf->byte ;
           // assert (ftello (vf->f) == vf->byte) ; // beware - very costly
 	}
-      
-      if (li->isGroup) // update group information
-        { OneInfo *lx = vf->info['*'];
-	  
-          if (vf->group >= lx->bufSize) // still room for final value because one ahead here
-            { I64  ns, *nb;
-
-              ns = (lx->bufSize << 1) + 0x20000;
-              nb = new (ns, I64);
-              memcpy(nb, lx->buffer, lx->bufSize*sizeof(I64));
-              free (lx->buffer);
-              lx->buffer  = nb;
-              lx->bufSize = ns;
-            }
-       
-          ((I64 *) lx->buffer)[vf->group-1] = vf->object; // group # already advanced
-        }
 
       // write the line character
       
@@ -2456,20 +2375,6 @@ static void oneWriteFooter (OneFile *vf)
 	    { oneChar(vf,0) = (char) i ;
 	      oneWriteLine (vf, '&', li->accum.count+1, li->index) ;
 	    }
-	  if (li->isGroup)
-	    { int j, jj ;
-	      for (jj = 0 ; jj < vf->nDefn ; ++jj)
-		{ j = vf->defnOrder[jj] ;
-		  if (li->gMaxCount[j])
-		    { oneChar(vf,1) = (char) j ;
-		      oneWriteLine (vf, '*', li->accum.count+1, li->gCount[j]) ;
-		    }
-		  if (li->gMaxTotal[j])
-		    { oneChar(vf,1) = (char) j ;
-		      oneWriteLine (vf, ':', li->accum.count+1, li->gTotal[j]) ;
-		    }
-		}
-	    }
           if (li->isUseListCodec && li->listCodec != DNAcodec)
             { oneChar(vf,0) = i;
               n = vcSerialize (li->listCodec, codecBuf);
@@ -2546,52 +2451,42 @@ void oneFinalizeCounts(OneFile *vf)
 	  if (li->isGroup) 	  // fix the group data
 	    for (jj = 0 ; jj < vf->nDefn ; ++jj)
 	      { j = vf->defnOrder[jj] ;
-		if (li->gCount[j])
-		  { resize (li->gCount[j], oldIndexSize, li->indexSize, I64) ;
-		    n = n0 ;
-		    OneInfo *lik1 = vf->info[i], *lik ;
+		OneInfo *lj = vf->info[j] ;
+		if (lj == li) continue ;
+		if (lj->isObject || lj->isGroup)
+		  { OneInfo *lik1 = vf->info[i], *lik ;
 		    for (k = 1 ; k < nthreads ; ++k)
 		      { lik = vf[k].info[i] ;
 			if (lik1->isInGroup) // must combine counts across the border
-			  { li->gCount[j][n] += lik->gCount[j][0] ;
-			    if (li->gCount[j][n] > li->gMaxCount[j])
-			      li->gMaxCount[j] = li->gCount[j][n] ;
+			  { lik1->gCount[j] += lik->gCount0[j] ;
+			    if (lik1->gCount[j] > li->gMaxCount[j])
+			      li->gMaxCount[j] = lik1->gCount[j] ;
 			  }
-			memcpy (&(li->gCount[n+1]), &(lik->gCount[1]), lik->accum.count*sizeof(I64)) ;
-			n += lik->accum.count ;
-			if (lik->gMaxCount[j] > li->gMaxCount[j])
-			  li->gMaxCount[j] = lik->gMaxCount[j] ;
 			lik1 = lik ;
 		      }
-		    if (lik->isInGroup) // update the counts at the end as in updateGroupStats()
-		      { li->gCount[j][n] = vf[k].info[j]->accum.count - lik->gCount[j][n] ;
-			if (li->gCount[j][n] > li->gMaxCount[j])
-			  li->gMaxCount[j] = li->gCount[j][n] ;
+		    if (lik1->isInGroup) // update the counts at the end as in updateGroupStats()
+		      { lik1->gCount[j] = vf[k].info[j]->accum.count - lik1->gCount[j] ;
+			if (lik1->gCount[j] > li->gMaxCount[j])
+			  li->gMaxCount[j] = lik1->gCount[j] ;
 		      }
 		  }
-		if (li->gTotal[j]) // and now the same for total
-		  { resize (li->gTotal[j], oldIndexSize, li->indexSize, I64) ;
-		    n = n0 ;
-		    OneInfo *lik1 = vf->info[i], *lik ;
+		if (lj->listEltSize > 0) // and now the same for total
+		  { OneInfo *lik1 = vf->info[i], *lik ;
 		    for (k = 1 ; k < nthreads ; ++k)
 		      { lik = vf[k].info[i] ;
 			if (lik1->isInGroup) // must combine counts across the border
-			  { li->gTotal[j][n] += lik->gTotal[j][0] ;
-			    if (li->gTotal[j][n] > li->gMaxTotal[j])
-			      li->gMaxTotal[j] = li->gTotal[j][n] ;
+			  { lik1->gTotal[j] += lik->gTotal0[j] ;
+			    if (lik1->gTotal[j] > li->gMaxTotal[j])
+			      li->gMaxTotal[j] = lik1->gTotal[j] ;
 			  }
-			memcpy (&(li->gTotal[n+1]), &(lik->gTotal[1]), lik->accum.count*sizeof(I64)) ;
-			n += lik->accum.count ;
-			if (lik->gMaxTotal[j] > li->gMaxTotal[j])
-			  li->gMaxTotal[j] = lik->gMaxTotal[j] ;
 			lik1 = lik ;
 		      }
-		    if (lik->isInGroup) // update the counts at the end as in updateGroupStats()
-		      { li->gTotal[j][n] = vf[k].info[j]->accum.total - lik->gTotal[j][n] ;
-			if (li->gTotal[j][n] > li->gMaxTotal[j])
-			  li->gMaxTotal[j] = li->gTotal[j][n] ;
+		    if (lik1->isInGroup) // update the counts at the end as in updateGroupStats()
+		      { lik1->gTotal[j] = vf[k].info[j]->accum.total - lik1->gTotal[j] ;
+			if (lik1->gTotal[j] > li->gMaxTotal[j])
+			  li->gMaxTotal[j] = lik1->gTotal[j] ;
 		      }
-		  } // li->gTotal[j]
+		  } // lj->listEltSize > 0
 	      } // li->isGroup, jj
 	} // vf->isBinary && (li->isObject || li->isGroup)
     } // ii

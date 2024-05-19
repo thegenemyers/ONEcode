@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Apr 30 23:55 2024 (rd109)
+ * Last edited: May 15 00:29 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -86,14 +86,16 @@ extern  OneCodec *DNAcodec;
   // Record for a particular line type.  There is at most one list element.
 
 typedef struct
-{   bool     isObject;          // set if this is an object type (O in schema)
-    bool     isGroup;           // set if this is a group type (G in schema)
-    bool     isInGroup;         // set at start of a group, unset at "/ t" lines
+{   bool      isObject;         // set if this is an object type (O in schema)
+    bool      isGroup;          // set if this is a group type (G in schema)
+    bool      isInGroup;        // set at start of a group, unset at "/ t" lines
     I64      *index;            // if an object type O or group type G, index of byte offsets
-    I64      *gCount[128];      // if a group, for all indexed types, their count in each group
-    I64      *gTotal[128];      // if a group, for all list types, their total in each group
-    I64       gMaxCount[128];   // if a group, largest value of gCount[i]
-    I64       gMaxTotal[128];   // if a group, largest value of gTotal[i]
+    I64       gCount0[128];     // if a group, the count of indexed type i up to group 1
+    I64       gTotal0[128];     // if a group, the total of list type i up to group 1
+    I64       gCount[128];      // if a group, the count of indexed type i at start of current group
+    I64       gTotal[128];      // if a group, the total of list type i at start of current group
+    I64       gMaxCount[128];   // if a group, largest value of gCount
+    I64       gMaxTotal[128];   // if a group, largest value of gTotal
     I64       indexSize;        // size of all the above arrays, if they are not NULL
 
     OneCounts accum;            // counts read or written to this moment
@@ -150,8 +152,6 @@ typedef struct
     char           lineType;           // current lineType
     I64            line;               // current line number
     I64            byte;               // current byte position when writing binary
-    I64            object;             // current object - incremented when object line read
-    I64            group;              // current group - incremented when group line read
     OneProvenance *provenance;         // if non-zero then count['!'] entries
     OneReference  *reference;          // if non-zero then count['<'] entries
     OneReference  *deferred;           // if non-zero then count['>'] entries

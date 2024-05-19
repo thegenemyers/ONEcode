@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University, 2019
  *
  * HISTORY:
- * Last edited: Apr 30 22:52 2024 (rd109)
+ * Last edited: May 14 23:23 2024 (rd109)
  *   * Dec 27 09:20 2019 (gene): style edits
  *   * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *
@@ -130,8 +130,8 @@ int main (int argc, char **argv)
       while (oneReadLine (vf)) ;
 
       if (isVerbose)
-	fprintf (stderr, "read %" PRId64 " objects in %" PRId64 " lines from OneFile %s type %s\n",
-		  vf->object,  vf->line, argv[0], vf->fileType) ;
+	fprintf (stderr, "read %" PRId64 " lines from OneFile %s type %s\n",
+		 vf->line, argv[0], vf->fileType) ;
 
       oneFinalizeCounts (vf) ;
     
