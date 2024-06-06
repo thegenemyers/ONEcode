@@ -14,6 +14,7 @@ install:
 
 clean:
 	$(RM) *.o *~ $(ALL) *.gch
+	$(RM) A.* B.* C.* small.1seq
 	$(RM) -r *.dSYM
 
 ### object files
@@ -41,5 +42,20 @@ seqextract: seqextract.c seqio.o ONElib.o $(UTILS_OBJS)
 
 seqstat: seqstat.c seqio.o ONElib.o $(UTILS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
+
+#TEST
+
+test: seqstat seqconvert seqextract
+	./seqstat -b small.fa
+	./seqconvert -1 small.fa > small.1seq
+	./seqstat -l small.1seq
+	./seqconvert -o A.fa.gz small.1seq
+	gunzip A.fa.gz
+	diff A.fa small.fa
+	./seqconvert -1 -H -o B.1seq small.1seq
+	./seqconvert -fa B.1seq
+	./seqconvert -U -o C.fa B.1seq
+	diff C.fa small.fa
+	./seqextract -fa -f seq6 -c 3:10-20 small.1seq
 
 ### end of file
