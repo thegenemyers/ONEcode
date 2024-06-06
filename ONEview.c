@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: May 15 02:29 2024 (rd109)
+ * Last edited: Jun  2 07:51 2024 (rd109)
  * * May 15 02:26 2024 (rd109): incorporate rd utilities so stand alone
  * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *-------------------------------------------------------------------
@@ -161,13 +161,21 @@ int main (int argc, char **argv)
 		  die ("can't locate to object %c %lld", indexType, objList->i0 ) ;
 		if (!oneReadLine (vfIn))
 		  die ("can't read object %c %lld", indexType, objList->i0) ;
-		if (objList->i0 == 0 && vfIn->lineType == indexType) ++objList->i0 ;
+		if (objList->i0 == 0) // write up until 1st object of indexType
+		  { while (vfIn->lineType && vfIn->lineType != indexType)
+		      { transferLine (vfIn, vfOut, fieldSize) ;
+			oneReadLine (vfIn) ;
+		      }
+		    ++objList->i0 ;
+		  }
+		bool isInside = true ;
 		while (vfIn->lineType && objList->i0 < objList->iN) // lineType 0 is end of file
-		  { transferLine (vfIn, vfOut, fieldSize) ;
+		  { if (isInside) transferLine (vfIn, vfOut, fieldSize) ;
 		    oneReadLine (vfIn) ;
-		    if (vfIn->lineType == '/' && oneChar(vfIn,0) == indexType) // end of object
-		      while (oneReadLine (vfIn) && vfIn->lineType != indexType) ;
-		    if (vfIn->lineType == indexType) ++objList->i0 ;
+		    if (!vfIn->info[(int)indexType]->contains[(int) vfIn->lineType])
+		      isInside = false ;
+		    if (vfIn->lineType == indexType)
+		      { ++objList->i0 ; isInside = true ; }
 		  }
 		objList = objList->next ;
 	      }
