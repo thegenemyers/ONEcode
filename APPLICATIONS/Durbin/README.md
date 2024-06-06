@@ -79,7 +79,7 @@ bases
   
 >seqconvert -1 small.fa > small.1seq
   
->composition -l small.1seq
+>seqstat -l small.1seq
 fasta file, 10 sequences >= 0, 577 total, 57.70 average, 42 min, 72 max
 approximate N50 60
 length distribution (quadratic bins)
@@ -134,7 +134,7 @@ acatacatatgatgtacactctatagctgatgacgactatatacgagagt
 > seqconvert -U -o C.fa B.1seq
 > diff C.fa small.fa
 
-> ./seqextract -fa -f seq6 -c 3:10-20 small.1seq
+> seqextract -fa -f seq6 -c 3:10-20 small.1seq
 >seq3:10-20
 cgtaaatgta
 >seq6:0-66
