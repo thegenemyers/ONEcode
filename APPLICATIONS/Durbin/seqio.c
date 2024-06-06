@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: May 15 03:13 2024 (rd109)
+ * Last edited: Jun  7 00:30 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -361,7 +361,7 @@ SeqIO *seqIOopenWrite (char *filename, SeqIOtype type, int* convert, int qualThr
   int nameLen = strlen (filename) ;
   char *ext ; // extension
   for (ext = filename + nameLen ; ext > filename && *--ext != '.' ;) { ; } ++ext ;
-  bool isGzip = !strcmp (ext, ".gz") ;
+  bool isGzip = !strcmp (ext, "gz") ;
   
   si->isWrite = true ;
   si->convert = convert ;
