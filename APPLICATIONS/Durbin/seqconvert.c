@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: May 19 23:21 2024 (rd109)
+ * Last edited: Jun  7 00:41 2024 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -234,7 +234,7 @@ static void convertUnHoco (SeqIO *siIn, SeqIO *siOut)
   while (vf->lineType == 'S') // we got to an S line in sqioOpenRead()
     { I64 slen = 0, tlen = oneLen(vf) ;
       bufferCheckSize (tbuf, tlen) ;
-      memcpy (tbuf, oneString(vf), tlen) ; // need to copy, because the ONElib buffer will be reused
+      memcpy (tbuf->buf, oneString(vf), tlen) ; // needed because the ONElib buffer will be reused
       
       while (oneReadLine (vf) && vf->lineType != 'H' && vf->lineType != 'S')
 	if (vf->lineType == 'I') storeIdLine (siIn, vf) ;
@@ -281,8 +281,9 @@ static char *scaffoldSchemaText =
   "1 3 def 1 0  schema for seqconvert to scafffold\n"
   ".\n"
   "P 3 seq SEQUENCE\n"
-  "G s 2 3 INT 6 STRING    scaffold: length then names, made of S objects and n lines\n"
+  "O s 2 3 INT 6 STRING    scaffold: length then names, made of S objects and n lines\n"
   "D g 1 3 INT             gap: length of block of n's in scaffold\n"
+  "G S 0                   scaffolds group sequences\n"
   "O S 1 3 DNA             sequence: the DNA string\n"
   "D I 1 6 STRING          id: (optional) sequence identifier\n"
   "D Q 1 6 STRING          quality: Q values (ascii string = q+33)\n"
