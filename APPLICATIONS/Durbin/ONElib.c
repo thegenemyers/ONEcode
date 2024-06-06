@@ -7,11 +7,8 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: May 19 08:32 2024 (rd109)
- * * May  1 00:23 2024 (rd109): removed vf->line updating on write - only useful when reading
+ * Last edited: Jun  2 07:49 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
- * * May  1 00:22 2024 (rd109): added '/ T' for ending groups or objects of type T
- * * Apr 21 21:09 2024 (rd109): switched comment linetype to | to reserve / for end of group
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
  * * Mar 11 02:48 2024 (rd109): added oneFileWriteSchema() to write schema files for bare text parsing
@@ -113,8 +110,11 @@ static OneInfo *infoDeepCopy (OneInfo *vi0)
   *vi = *vi0 ;
   if (vi0->nField) vi->fieldType = dup (vi->nField, vi0->fieldType, OneType) ;
   if (vi0->listCodec && vi->listCodec != DNAcodec) vi->listCodec = vcCreate() ;
-  if (vi0->comment) vi->comment = strdup (vi0->comment) ;
   if (vi0->index) vi->index = dup (vi->indexSize, vi0->index, I64) ;
+  if (vi0->stats)
+    { int n = 1 ; OneStat *s ; for (s = vi->stats ; s->type ; ++s) ++n ;
+      vi->stats = dup (n, vi0->stats, OneStat) ;
+    }
   return vi ;
 }
 
@@ -122,12 +122,20 @@ static void infoDestroy (OneInfo *vi)
 { if (vi->buffer && ! vi->isUserBuf) free (vi->buffer) ;
   if (vi->listCodec) vcDestroy (vi->listCodec) ;
   if (vi->fieldType) free (vi->fieldType) ;
-  if (vi->comment) free (vi->comment) ;
   if (vi->index) free (vi->index) ;
+  if (vi->stats) free (vi->stats) ;
   free (vi);
 }
 
 /******************* OneSchema ********************/
+
+static void schemaAddGroup (OneSchema *vs, char t)
+{
+  if (!vs->currentObject) die ("G %c line when no object defined", t) ;
+  vs->currentObject->contains[(int)t] = true ;
+  vs->defnOrder[vs->nDefn++] = t | 0x80 ; // definition order
+  return ;
+}
 
 // a utility to set the OneInfo list information
 
@@ -139,18 +147,24 @@ static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, ch
   
   if (vs->info[(int) t])
     die ("duplicate schema specification for linetype %c in filetype %s", t, vs->primary) ;
-
+  
   OneInfo *vi = infoCreate (n) ;
   vs->info[(int)t] = vi ;
   if ((t >= 'A' && t <= 'Z') || (t >= 'a' && t <= 'z'))
     vs->defnOrder[vs->nDefn++] = t ; // definition order
 
   if (isalpha(t) && type == 'O')
-    vi->isObject = true ;
-  else if (isalpha(t) && type == 'G')
-    vi->isGroup = true ;
-  else if (vs->primary && (type != 'D' || !isalpha(t))) // allow non-alphabetic lines in header
-    die ("non-alphabetic linetype %c (ascii %d) in schema for filetype %s",t,t,vs->primary) ;
+    { vi->isObject = true ;
+      vs->currentObject = vi ;
+    }
+  else
+    { if (type != 'D')
+	die ("type %c not 'O' or 'D' in schemaAddInfo", type) ;
+      if (vs->primary && !isalpha(t)) // allow non-alphabetic lines in header
+	die ("non-alphabetic linetype %c (ascii %d) in schema for filetype %s",t,t,vs->primary) ;
+      if (vs->currentObject)
+	vs->currentObject->contains[(int)t] = true ;
+    }
     
   if (n > vs->nFieldMax) vs->nFieldMax = n ;
   
@@ -164,7 +178,7 @@ static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, ch
 	vi->listField = i ;
 	if (a[i] == oneDNA)
 	  { vi->listCodec = DNAcodec ; vi->isUseListCodec = true ; }
-	else if (t != '|') // make a listCodec for any list type except for commments
+	else if (t != '/') // make a listCodec for any list type except for commments
 	  vi->listCodec = vcCreate () ; 
       }
 
@@ -173,9 +187,8 @@ static void schemaAddInfoFromArray (OneSchema *vs, int n, OneType *a, char t, ch
   else if (t >= 'a' && t <= 'z') vi->binaryTypePack = ((26+t-'a') << 1) | (char) 0x80 ;
   else if (t == ';') vi->binaryTypePack = (52 << 1) | (char) 0x80 ; // list codec
   else if (t == '&') vi->binaryTypePack = (53 << 1) | (char) 0x80 ; // byte index
-  else if (t == '|') vi->binaryTypePack = (54 << 1) | (char) 0x80 ; // comment - binary only
+  else if (t == '/') vi->binaryTypePack = (54 << 1) | (char) 0x80 ; // comment - binary only
   else if (t == '.') vi->binaryTypePack = (55 << 1) | (char) 0x80 ; // blank line
-  else if (t == '/') vi->binaryTypePack = (56 << 1) | (char) 0x80 ; // end of object/group
   // don't need for #, +, @, % because these lines are always written in ASCII
 }
 
@@ -202,9 +215,6 @@ static void schemaAddInfoFromLine (OneSchema *vs, OneFile *vf, char t, char type
     }
 
   schemaAddInfoFromArray (vs, n, a, t, type) ;
-
-  if (oneReadComment (vf))
-    vs->info[(int)t]->comment = strdup (oneReadComment(vf)) ;
 }
 
 static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
@@ -241,10 +251,14 @@ static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
       vs->secondary[vs->nSecondary] = new0 (oneLen(vf)+1, char) ;
       strcpy (vs->secondary[vs->nSecondary++], s) ;
       break ;
-    case 'G': // group type
+    case 'G': // group another object type
+      schemaAddGroup (vs, oneChar(vf,0)) ;
+      if (oneReadComment (vf)) vs->defnComment[vs->nDefn-1] = strdup (oneReadComment(vf)) ;
+      break ;
     case 'O': // object type
     case 'D': // standard record type
       schemaAddInfoFromLine (vs, vf, oneChar(vf,0), vf->lineType) ;
+      if (oneReadComment (vf)) vs->defnComment[vs->nDefn-1] = strdup (oneReadComment(vf)) ;
       break ;
     default:
       die ("unrecognized schema line %d starting with %c", vf->line, vf->lineType) ;
@@ -277,7 +291,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
     vi = vf->info['D'] = infoCreate (2) ;  // line type specification
     vi->fieldType[0] = oneCHAR ;
     vi->fieldType[1] = oneSTRING_LIST ; vi->listEltSize = 1 ; vi->listField = 1 ;
-    vf->info['|'] = infoCreate (0) ;       // to store comments
+    vf->info['/'] = infoCreate (0) ;       // to store comments
     vf->field = new (2, OneField) ;
   }
 
@@ -331,8 +345,8 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   fprintf (vf->f, "P 3 def                      this is the primary file type for schemas\n") ;
   fprintf (vf->f, "O P 1 6 STRING               primary type name\n") ;
   fprintf (vf->f, "D S 1 6 STRING               secondary type name\n") ;
-  fprintf (vf->f, "D G 2 4 CHAR 11 STRING_LIST  define linetype for group type\n") ;
   fprintf (vf->f, "D O 2 4 CHAR 11 STRING_LIST  define linetype for object type (indexed)\n") ;
+  fprintf (vf->f, "D G 1 4 CHAR                 define linetype for grouping another object\n") ;
   fprintf (vf->f, "D D 2 4 CHAR 11 STRING_LIST  define linetype for other records\n") ;
   fprintf (vf->f, "\n") ; // terminator
   if (fseek (vf->f, 0, SEEK_SET)) die ("ONE schema failure: cannot rewind tmp file") ;
@@ -430,25 +444,27 @@ void oneSchemaDestroy (OneSchema *vs)
     }
 }
 
-static void writeInfoSpec (FILE *f, OneFile *vf, char ci) // also used in writeHeader()
+static void writeInfoSpec (FILE *f, OneFile *vf, char ci, char *comment) // also used in writeHeader()
 {
-  int i ;
-  OneInfo *vi = vf->info[(int) ci] ;
 
   if (f == vf->f) fprintf (f, "\n~ ") ; // writing the schema into the file header
   else fprintf (f, "\n") ;              // just writing a schema file
 
-  if (vi->isGroup)
-    fprintf (f, "G %c %d", ci, vi->nField) ;
-  else if (vi->isObject)
-    fprintf (f, "O %c %d", ci, vi->nField) ;
+  if (ci & 0x80)
+    fprintf (f, "G %c 0", ci & 0x7f) ;
   else
-    fprintf (f, "D %c %d", ci, vi->nField) ;
-  for (i = 0 ; i < vi->nField ; ++i)
-    fprintf (f, " %d %s",
-	     (int)strlen(oneTypeString[vi->fieldType[i]]), oneTypeString[vi->fieldType[i]]) ;
-  if (vi->comment)
-    oneWriteComment (vf, "%s", vi->comment) ;
+    { OneInfo *vi = vf->info[(int) ci] ;
+      if (vi->isObject)
+	fprintf (f, "O %c %d", ci, vi->nField) ;
+      else
+	fprintf (f, "D %c %d", ci, vi->nField) ;
+      int i ;
+      for (i = 0 ; i < vi->nField ; ++i)
+	fprintf (f, " %d %s",
+		 (int)strlen(oneTypeString[vi->fieldType[i]]), oneTypeString[vi->fieldType[i]]) ;
+    }
+  if (comment)
+    oneWriteComment (vf, "%s", comment) ;
 }
 
 void oneFileWriteSchema (OneFile *vf, char *filename)
@@ -466,13 +482,63 @@ void oneFileWriteSchema (OneFile *vf, char *filename)
   if (vf->subType) fprintf (f, "\nS %d %s", (int)strlen(vf->subType), vf->subType) ;
 
   for (i = 0 ; i < vf->nDefn ; ++i)
-    writeInfoSpec (f, vf, vf->defnOrder[i]) ;
+    writeInfoSpec (f, vf, vf->defnOrder[i], vf->defnComment[i]) ;
   
   fprintf (f, "\n") ;
   fclose (f) ;
 }
 
 /*************************************/
+
+static void initialiseStats (OneFile *vf)
+{
+  int      i, j, k ;
+  OneInfo *li, *lj ;
+
+  // first ensure the contains[] arrays follow the defn lines
+  OneInfo *currentInfo = 0 ;
+  for (i = 0 ; i < vf->nDefn ; ++i)
+    { k = vf->defnOrder[i] ;
+      if (k & 0x80) currentInfo->contains[k & 0x7f] = true ;
+      else if (vf->info[k]->isObject) currentInfo = vf->info[k] ;
+      else currentInfo->contains[k] = true ;
+    }
+
+  // next ensure the contains[] arrays are complete by recursion
+  bool isDone = false ;
+  while (!isDone)
+    { isDone = true ; // set to false if we have to change anything
+      for (i = 'A' ; i <= 'z' ; ++i)
+	if (vf->info[i] && vf->info[i]->isObject)
+	  { li = vf->info[i] ;
+	    for (j = 'A' ; j <= 'z' ; ++j)
+	      if (li->contains[j] && vf->info[j] && vf->info[j]->isObject)
+		{ lj = vf->info[j] ;
+		  for (k = 'A' ; k <= 'z' ; ++k)
+		    if (lj->contains[k] && !li->contains[k])
+		      { isDone = false ;
+			li->contains[k] = true ;
+		      }
+		}
+	  }
+    }
+
+  // next create the stats arrays
+  for (i = 'A' ; i <= 'z' ; ++i)
+    if (vf->info[i] && vf->info[i]->isObject)
+      { li = vf->info[i] ;
+	if (li->stats) free (li->stats) ;
+	int n = 0 ; for (j = 'A' ; j <= 'z' ; ++j) if (li->contains[j]) ++n ;
+	OneStat *s = li->stats = new0 (n+1, OneStat) ;
+	for (j = 'A' ; j <= 'z' ; ++j)
+	  if (li->contains[j]) { s->type = j ; ++s ; }
+      }
+
+  // finally set isFirst
+  for (i = 'A' ; i <= 'z' ; ++i)
+    if (vf->info[i])
+      vf->info[i]->isFirst = true ;
+}
 
 static inline void setCodecBuffer (OneInfo *vi)
 {
@@ -520,6 +586,8 @@ static OneFile *oneFileCreate (OneSchema **vsp, const char *type)
   // transfer info from matched schema
   for (i = 0 ; i < 128 ; ++i)
     if (vs->info[i]) vf->info[i] = infoDeepCopy (vs->info[i]) ;
+
+  initialiseStats (vf) ; // builds info->stats records once info is complete
   
   // build binaryTypeUnpack[]
   for (i = 0 ; i < 128 ; ++i)
@@ -540,6 +608,8 @@ static OneFile *oneFileCreate (OneSchema **vsp, const char *type)
   vf->field = new (vf->nFieldMax, OneField) ;
   vf->nDefn = vs->nDefn ;
   memcpy (vf->defnOrder, vs->defnOrder, 128*sizeof(int)) ;
+  for (i = 0 ; i < 128 ; ++i)
+    if (vs->defnComment[i]) vf->defnComment[i] = strdup (vs->defnComment[i]) ;
 
   // setup for compression
 
@@ -744,7 +814,7 @@ static inline void readString(OneFile *vf, char *buf, I64 n)
 static inline void readFlush (OneFile *vf) // reads to the end of the line and stores as comment
 { char       x;
   int        n = 0;
-  OneInfo   *li = vf->info['|'] ;
+  OneInfo   *li = vf->info['/'] ;
 
   // check the first character - if it is newline then done
   x = getc (vf->f) ; 
@@ -1007,8 +1077,8 @@ char oneReadLine (OneFile *vf)
   if (li->accum.count >= 0) // after goto set to -1 for unindexed linetypes - can't know the count
     li->accum.count += 1;   // includes update of indexed type counts
 
-  if (vf->info['|']->bufSize) // clear the comment buffer
-    *(char*)(vf->info['|']->buffer) = 0 ;
+  if (vf->info['/']->bufSize) // clear the comment buffer
+    *(char*)(vf->info['/']->buffer) = 0 ;
 
   vf->nBits = 0 ;        // will use for any compressed data read in
   
@@ -1117,10 +1187,10 @@ char oneReadLine (OneFile *vf)
 	ungetc(peek, vf->f) ;
 	if (peek & 0x80)
 	  peek = vf->binaryTypeUnpack[peek];
-	if (peek == '|') // a comment
+	if (peek == '/') // a comment
 	  { OneField keepField0 = vf->field[0] ;
 	    I64 keepNbits = vf->nBits ; // will be reset in readLine
-	    oneReadLine (vf) ; // read comment line into vf->info['|']->buffer
+	    oneReadLine (vf) ; // read comment line into vf->info['/']->buffer
 	    vf->lineType = t ;
 	    vf->field[0] = keepField0 ;
 	    vf->nBits = keepNbits ;
@@ -1132,7 +1202,7 @@ char oneReadLine (OneFile *vf)
 }
 
 char *oneReadComment (OneFile *vf)
-{ char *comment = (char*)(vf->info['|']->buffer) ;
+{ char *comment = (char*)(vf->info['/']->buffer) ;
 
   if (comment && *comment != 0)
     return comment ;
@@ -1310,22 +1380,28 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 
 	case '~': // schema definition line
 	  { char t = oneChar(vf,1) ;
-	    int oldMax = vf->nFieldMax ;
-	    schemaAddInfoFromLine (vsFile, vf, t, oneChar(vf,0)) ;
-	    OneInfo *vi = vsFile->info[(int)t] ;
-	    vf->info[(int)t] = infoDeepCopy (vi) ;
-	    if ((t >= 'A' && t <= 'Z') || (t >= 'a' && t <= 'z'))
-	      vf->defnOrder[vf->nDefn++] = t ; // definition order
-	    if (vi->binaryTypePack)
-	      { U8 x = vi->binaryTypePack ;
-		vf->binaryTypeUnpack[x] = t ;
-		vf->binaryTypeUnpack[x+1] = t ;
+	    if (oneChar(vf,0) == 'G')
+	      { schemaAddGroup (vsFile, t) ;
+		vf->defnOrder[vf->nDefn++] = t | 0x80 ; // definition order
 	      }
-	    if (vsFile->nFieldMax > oldMax)
-	      { free (vf->field) ;
-		vf->nFieldMax = vsFile->nFieldMax ;
-		vf->field = new (vf->nFieldMax, OneField) ;
+	    else
+	      { int oldMax = vf->nFieldMax ;
+		schemaAddInfoFromLine (vsFile, vf, t, oneChar(vf,0)) ;
+		OneInfo *vi = vsFile->info[(int)t] ;
+		vf->info[(int)t] = infoDeepCopy (vi) ;
+		vf->defnOrder[vf->nDefn++] = t ; // definition order
+		if (vi->binaryTypePack)
+		  { U8 x = vi->binaryTypePack ;
+		    vf->binaryTypeUnpack[x] = t ;
+		    vf->binaryTypeUnpack[x+1] = t ;
+		  }
+		if (vsFile->nFieldMax > oldMax)
+		  { free (vf->field) ;
+		    vf->nFieldMax = vsFile->nFieldMax ;
+		    vf->field = new (vf->nFieldMax, OneField) ;
+		  }
 	      }
+	    if (oneReadComment (vf)) vf->defnComment[(int)t] = strdup (oneReadComment (vf)) ;
 	  }
 	  break ;
 
@@ -1335,13 +1411,11 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
         case '%':
           { char      c = oneChar(vf,0);
             OneInfo *li = vf->info[(int) c] ;
-
-            if (li == NULL)
-              parseError (vf, "unknown line type %c", c);
+            if (li == NULL) parseError (vf, "unknown line type %c", c);
             switch (vf->lineType)
             { case '#':
                 li->given.count = oneInt(vf,1);
-		if (vf->isBinary && li && (li->isObject || li->isGroup))  // allocate space for indices
+		if (vf->isBinary && li && li->isObject)  // allocate space for indices
 		  { li->indexSize = li->given.count + 1 ; // +1 because 1..n
 		    li->index = new (li->indexSize, I64) ;
 		    if (li->indexSize > maxIndexSize) maxIndexSize = li->indexSize ;
@@ -1356,13 +1430,17 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
                 li->given.total = oneInt(vf,1);
                 break;
               case '%':
-                { int j = oneChar(vf,2);
-		  if (vf->info[j] == NULL) parseError (vf, "unknown line type %c", j);
+                { if (!li->isObject) parseError (vf, "% on a non-object type %c", c) ;
+		  if (!li->stats) initialiseStats (vf) ;
+		  int j = oneChar(vf,2);
+		  OneStat *s ;
+		  for (s = li->stats ; s->type && s->type != j ; ++s)
+		  if (!s->type) parseError (vf, "unknown line type %c", j);
 		  c = oneChar(vf,1);
 		  if (c == '#')
-		    li->gMaxCount[j] = oneInt(vf,3);
+		    s->maxCount = oneInt(vf,3);
 		  else if (c == '+')
-		    li->gMaxTotal[j] = oneInt(vf,3);
+		    s->maxTotal = oneInt(vf,3);
 		  else
 		    parseError (vf, "unrecognised symbol %c", c);
 		}
@@ -1442,6 +1520,8 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
       return NULL ;
     }
 
+  initialiseStats (vf) ; // call here in case not called above for a % line - no harm if already done
+  
   // allocate codec buffer - always allocate enough to handle fields of all line types
 
   { I64 size = vf->nFieldMax * sizeof(OneField) ;
@@ -1490,6 +1570,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	    { OneInfo *li = v->info[j];
 	      if (li != NULL)
 		{ OneInfo *l0 = vf->info[j];
+		  li->given = l0->given; // copy the given data
 		  if (li->listCodec) vcDestroy (li->listCodec) ; // share the codec
 		  li->listCodec  = l0->listCodec;
 		  if (li->listEltSize > 0) // need a private buffer
@@ -1497,19 +1578,14 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 		      if (li->buffer) free (li->buffer) ;
 		      li->buffer  = new (l0->bufSize*l0->listEltSize, void);
 		    }
-		  li->given = l0->given;
 		  if (l0->isObject) li->isObject = true ;
 		  if (l0->index) // share the index
 		    { if (li->index) free(li->index) ;
 		      li->index = l0->index ;
 		    }
-		  if (l0->isGroup) // share the group data
-		    { li->isGroup = true ;
-		      int k ;
-		      for (k = 'A' ; k < 'z' ; ++k)
-			{ if (l0->gMaxCount[k]) li->gMaxCount[k] = l0->gMaxCount[k] ;
-			  if (l0->gTotal[k]) li->gMaxTotal[k] = l0->gMaxTotal[k] ;
-			}
+		  if (l0->stats) // copy the group data
+		    { OneStat *s0 = l0->stats, *s = li->stats ;
+		      for ( ; s0->type ; ++s0, ++s) *s = *s0 ;
 		    }
 		}
 	    }
@@ -1579,7 +1655,7 @@ bool oneGoto (OneFile *vf, char lineType, I64 i)
   int j, k ;
   for (k = 0 ; k < vf->nDefn ; ++k)
     { j = vf->defnOrder[k] ;
-      if (j != lineType) // must set vj->accum.count
+      if (!(j & 0x80) && j != lineType) // must set vj->accum.count
 	{ OneInfo *lj = vf->info[j] ;
 	  if (i == 0) // start of data for all linetypes
 	    lj->accum.count = 0 ;
@@ -1613,7 +1689,7 @@ static inline void allocateIndices (OneFile *vf, int i, I64 size)
   OneInfo *li = vf->info[i] ;
   assert (li != NULL) ;
 
-  if (li->isObject || li->isGroup)
+  if (li->isObject)
     { li->indexSize = size ;
       if (li->index) free(li->index) ;
       li->index = new (size, I64) ;
@@ -1637,6 +1713,8 @@ OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileT
   vf = oneFileCreate (&vs, fileType) ;
   if (!vf)
     return NULL ;
+
+  initialiseStats (vf) ;
   
   vf->f = f;
   vf->isWrite  = true;
@@ -1647,7 +1725,8 @@ OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileT
   vf->codecBuf     = new (vf->codecBufSize, void);
   int ii ;
   for (ii = 0 ; ii < vf->nDefn ; ++ii)
-    allocateIndices (vf, vf->defnOrder[ii], 0x10000) ;
+    if (!(vf->defnOrder[ii] & 0x80))
+      allocateIndices (vf, vf->defnOrder[ii], 0x10000) ;
 
   if (nthreads > 1)
     { OneFile *v, *vf0 = vf ;
@@ -1674,7 +1753,8 @@ OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileT
 	  v->codecBuf     = new (v->codecBufSize, void);
 	  v->codecTrainingSize /= 3*nthreads;
 	  for (ii = 0 ; ii < v->nDefn ; ++ii)
-	    allocateIndices (v, v->defnOrder[ii], 0x10000) ; // create separate indices for each thread
+	    if (!(vf->defnOrder[ii] & 0x80))
+	      allocateIndices (v, v->defnOrder[ii], 0x10000) ; // make separate indices for each thread
 
           v->share = -i; // this is the key mark for the i'th slave
 
@@ -1701,11 +1781,13 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   int i, k;
   for (k = 0 ; k < vfIn->nDefn ; ++k)
     { i = vfIn->defnOrder[k] ;
-      OneInfo *li = vfIn->info[i] ;
-      if (li->isGroup) schemaAddInfoFromArray (vs, li->nField, li->fieldType, (char)i, 'G') ;
-      else if (li->isObject) schemaAddInfoFromArray (vs, li->nField, li->fieldType, (char)i, 'O') ;
-      else schemaAddInfoFromArray (vs, li->nField, li->fieldType, (char)i, 'D') ;
-      if (li->comment) vs->info[i]->comment = strdup (li->comment) ;
+      if (i & 0x80) schemaAddGroup (vs, (char)(i & 0x7f)) ;
+      else
+	{ OneInfo *li = vfIn->info[i] ;
+	  if (li->isObject) schemaAddInfoFromArray (vs, li->nField, li->fieldType, (char)i, 'O') ;
+	  else schemaAddInfoFromArray (vs, li->nField, li->fieldType, (char)i, 'D') ;
+	}
+      if (vfIn->defnComment[k]) vs->defnComment[k] = strdup (vfIn->defnComment[k]) ;
     }
 
   // use it to open the file
@@ -1721,7 +1803,11 @@ OneFile *oneFileOpenWriteFrom (const char *path, OneFile *vfIn, bool isBinary, i
   if (vfIn->headerText)
     { OneHeaderText *tin = vfIn->headerText ;
       OneHeaderText *t = new0 (1, OneHeaderText) ;
-      while (tin) { t->text = tin->text ; tin = tin->nxt ; t = t->nxt = new0 (1, OneHeaderText) ; }
+      vf->headerText = t ;
+      while (tin)
+	{ t->text = strdup(tin->text) ; tin = tin->nxt ;
+	  if (tin) t = t->nxt = new0 (1, OneHeaderText) ;
+	}
     }     
   
   // set info[]->given, and resize codecBuf accordingly
@@ -1778,11 +1864,6 @@ bool oneFileCheckSchema (OneFile *vf, OneSchema *vs, bool isRequired)
 	{ if (vif->isObject != vis->isObject)
 	    { fprintf (stderr, "OneSchema mismatch: object type %c file %d != schema %d\n",
 		       i, vif->isObject, vis->isObject) ;
-	      isMatch = false ;
-	    }
-	  if (vif->isGroup != vis->isGroup)
-	    { fprintf (stderr, "OneSchema mismatch: group type %c file %d != schema %d\n",
-		       i, vif->isGroup, vis->isGroup) ;
 	      isMatch = false ;
 	    }
 	  if (vif->nField != vis->nField)
@@ -1941,14 +2022,13 @@ static bool writeCounts (OneFile *vf, int i) // always write counts in ascii
 	fprintf (vf->f, "@ %c %" PRId64 "\n", i, li->given.max);
       if (li->given.total > 0)
 	fprintf (vf->f, "+ %c %" PRId64 "\n", i, li->given.total);
-      if (li->isGroup)
-	{ int jj ;
-	  for (jj = 0 ; jj < vf->nDefn ; ++jj)
-	    { int j = vf->defnOrder[jj] ;
-	      if (li->gMaxCount[j])
-		fprintf (vf->f, "%% %c # %c %" PRId64 "\n", i, j, li->gMaxCount[j]);
-	      if (li->gMaxTotal[j])
-		fprintf (vf->f, "%% %c + %c %" PRId64 "\n", i, j, li->gMaxTotal[j]);
+      if (li->isObject)
+	{ OneStat *s ;
+	  for (s = li->stats ; s->type ; ++s)
+	    { if (s->maxCount)
+		fprintf (vf->f, "%% %c # %c %" PRId64 "\n", i, s->type, s->maxCount);
+	      if (s->maxTotal)
+		fprintf (vf->f, "%% %c + %c %" PRId64 "\n", i, s->type, s->maxTotal);
 	    }
 	}
       return true ;
@@ -1968,6 +2048,15 @@ static void writeHeader (OneFile *vf)
   fprintf (vf->f, "1 %lu %s %d %d", strlen(vf->fileType), vf->fileType, MAJOR, MINOR);
   if (vf->subType)
     fprintf (vf->f, "\n2 %lu %s", strlen(vf->subType), vf->subType);
+
+  // any header text on '.' lines
+  if (vf->headerText)
+    { OneHeaderText *t = vf->headerText ;
+      while (t)
+	{ fprintf (vf->f, "\n. %s", t->text) ;
+	  t = t->nxt ;
+	}
+    }
 
   // provenance
   if (vf->info['!']->accum.count)
@@ -1997,27 +2086,16 @@ static void writeHeader (OneFile *vf)
 
   // write the schema into the header - no need for file type, version etc. since already given
   for (i = 0 ; i < vf->nDefn ; ++i)
-    writeInfoSpec (vf->f, vf, vf->defnOrder[i]) ;
-
-  // any header text on '.' lines
-  if (vf->headerText)
-    { OneHeaderText *t = vf->headerText ;
-      while (t)
-	{ fprintf (vf->f, "\n. %s", t->text) ;
-	  t = t->nxt ;
-	}
-      fprintf (vf->f, "\n.") ;
-    }
+    writeInfoSpec (vf->f, vf, vf->defnOrder[i], vf->defnComment[i]) ;
 
   if (vf->isBinary)         // defer writing rest of header
     fprintf (vf->f, "\n$ %d", vf->isBig);
   else                      // write counts based on those supplied in info[i].given
     { fprintf (vf->f, "\n.\n") ;
-      bool isCountWritten = false ;
       for (i = 0 ; i < vf->nDefn ; ++i)
-	isCountWritten |= writeCounts (vf, vf->defnOrder[i]) ;
-      if (isCountWritten)
-	fprintf (vf->f, ".") ; // need to set up an incomplete line
+	if (!(vf->defnOrder[i] & 0x80))
+	  writeCounts (vf, vf->defnOrder[i]) ;
+      fprintf (vf->f, ".") ; // need to set up an incomplete line
     }
   fflush (vf->f);
 
@@ -2051,41 +2129,54 @@ static int writeStringList (OneFile *vf, char t, int len, char *buf)
   return nByteWritten ;
 }
 
-  //  Called when group ends, explicitly with / or when a new group starts or at eof
-  //  Update group maxCount, maxTotal
+// code to track counts for objects
 
-static inline void updateGroupStats (OneFile *vf, OneInfo *li, bool isGroupLine)
-{ int        j,k;
-  OneInfo   *lj;
-
-  int n = li->accum.count ; // index of the current group
-  for (k = 0 ; k < vf->nDefn ; ++k)
-    { j = vf->defnOrder[k] ;
-      lj = vf->info[j] ;
-      if (lj != li)
-	{ if (lj->index)
-	    { if (li->isInGroup && (lj->accum.count - li->gCount[j] > li->gMaxCount[j]))
-		li->gMaxCount[j] = lj->accum.count - li->gCount[j] ;
-	      if (isGroupLine)
-		{ li->gCount[j] = lj->accum.count ;
-		  if (n == 0) li->gCount0[j] = li->gCount[j] ;
-		}
-	    }
-	  if (lj->listEltSize > 0)
-	    { if (li->isInGroup && (lj->accum.total - li->gTotal[j] > li->gMaxTotal[j]))
-		li->gMaxTotal[j] = lj->accum.total - li->gTotal[j] ;
-	      if (isGroupLine)
-		{ li->gTotal[j] = lj->accum.total ;
-		  if (n == 0) li->gTotal0[j] = li->gTotal[j] ;
-		}
-	    }
-	}
+static inline void startObject (OneFile *vf, OneInfo *li)
+{
+  OneStat *s ;
+  for (s = li->stats ; s->type ; ++s)
+    { s->count = vf->info[(int)s->type]->accum.count ;
+      if (s->isList) s->total = vf->info[(int)s->type]->accum.total ;
     }
-  
-  if (isGroupLine) li->isInGroup = true ;
-  else li->isInGroup = false ;
+  if (li->accum.count == 1) // must record count/total before first object in file
+    for (s = li->stats ; s->type ; ++s)
+      { s->count0 = vf->info[(int)s->type]->accum.count ;
+	if (s->isList) s->total0 = vf->info[(int)s->type]->accum.total ;
+      }
+  vf->openObjects[++vf->objectFrame] = li ;
 }
 
+static inline void endObject (OneFile *vf, OneInfo *li)
+{
+  OneStat *s ;
+  for (s = li->stats ; s->type ; ++s)
+    { if (vf->info[(int)s->type]->accum.count - s->count > s->maxCount)
+	s->maxCount = vf->info[(int)s->type]->accum.count - s->count ;
+      if (s->isList && vf->info[(int)s->type]->accum.total - s->total > s->maxTotal)
+	s->maxTotal = vf->info[(int)s->type]->accum.total ;
+    }
+  --vf->objectFrame ;
+}
+
+static inline void closeObjects (OneFile *vf, char t) // set count0 for any objects terminated by t
+{
+  int i, *ik = vf->defnOrder ;
+  for (i = 0 ; i < vf->nDefn ; ++i, ++ik)
+    if (!(*ik & 0x80))
+      { OneInfo *li = vf->info[*ik] ;
+	if (li->isObject && !li->isClosed && !li->contains[(int)t])
+	  { OneStat *s = li->stats ;
+	    while (s->type)
+	      { s->count0 = vf->info[(int)s->type]->accum.count ;
+		if (s->isList) s->total0 = vf->info[(int)s->type]->accum.total ;
+		++s ;
+	      }
+	    li->isClosed = true ;
+	  }
+      }
+  vf->info[(int) t]->isFirst = false ;
+}
+ 
 // process is to fill fields by assigning to macros, then call - list contents are in buf
 // NB in ASCII mode adds '\n' before writing line not after, so oneWriteComment() can add to line
 // first call will write initial header
@@ -2102,14 +2193,11 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
   li = vf->info[(int) t];
   if (!li) die ("oneWriteLine() attempting to write unkown linetype %c", t) ;
 
-  if (li->isGroup) updateGroupStats(vf, li, true);
-  if (t == '/') // end of object or group
-    { OneInfo *lg = vf->info[(int)oneChar(vf,0)] ;
-      if (!lg || !(lg->isObject || lg->isGroup))
-	die ("oneWriteline() attempting to close non-indexed line type %c", oneChar(vf,0)) ;
-      if (lg->isGroup) updateGroupStats (vf, lg, false) ;
-    }
-  li->accum.count += 1; // must come after updating group stats
+  if (li->isFirst) closeObjects (vf, t) ;
+  if (vf->objectFrame && !(vf->openObjects[vf->objectFrame]->contains[(int)t]))
+    endObject (vf, vf->openObjects[vf->objectFrame]) ;
+  li->accum.count += 1;
+  if (li->isObject) startObject (vf, li) ;
 
   if (li->listEltSize > 0)  // need to write the list
     { assert (listLen >= 0) ;
@@ -2137,7 +2225,7 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
 	  vf->byte = ftello (vf->f) ;
 	}
 
-      if (li->isObject || li->isGroup) // update index
+      if (li->isObject) // update index
 	{ if (li->accum.count >= li->indexSize)
 	    { I64 oldSize = li->indexSize ;
 	      li->indexSize = (oldSize << 2) + 0x10000 ;
@@ -2266,6 +2354,8 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
 
       if (!vf->isLastLineBinary)      // terminate previous ascii line
 	fputc ('\n', vf->f);
+
+      ++vf->line ; // only really needed when closing the file to see if we need to terminate it
       
       fputc (t, vf->f);
 
@@ -2339,7 +2429,7 @@ void oneWriteComment (OneFile *vf, char *format, ...)
     }
 
   if (vf->isLastLineBinary) // write a comment line
-    oneWriteLine (vf, '|', strlen(comment), comment) ;
+    oneWriteLine (vf, '/', strlen(comment), comment) ;
   else // write on same line after space
     { fputc (' ', vf->f) ;
       fprintf (vf->f, "%s", comment) ;
@@ -2367,6 +2457,7 @@ static void oneWriteFooter (OneFile *vf)
   codecBuf = new (vcMaxSerialSize()+1, char) ; // +1 for added up unused 0-terminator
   for (k = 0; k < vf->nDefn ; ++k)
     { i  = vf->defnOrder[k] ;
+      if (i & 0x80) continue ; // skip the 'G' lines
       li = vf->info[i];
       if (li->accum.count > 0)
         { li->given = li->accum ;
@@ -2383,9 +2474,9 @@ static void oneWriteFooter (OneFile *vf)
         }
     }
 
-  li = vf->info['|'] ;		// may need to write list codec for comments
+  li = vf->info['/'] ;		// may need to write list codec for comments
   if (li->isUseListCodec)
-    { oneChar(vf,0) = '|' ;
+    { oneChar(vf,0) = '/' ;
       n = vcSerialize (li->listCodec, codecBuf);
       oneWriteLine (vf, ';', n, codecBuf);
     }
@@ -2403,93 +2494,89 @@ static void oneWriteFooter (OneFile *vf)
   //   the master file (if a parallel OneFile).
 
 void oneFinalizeCounts(OneFile *vf)
-{ int      i, ii, j, jj, k ;
+{ int      i, ii, j, k ;
   OneInfo *li, *lk;
 
   if (vf->share < 0)
     die ("ONE write error: cannot call oneFileClose on a slave OneFile");
 
-  vf->isFinal = true;
+  vf->isFinal = true; // needed to prevent infinite recursion
 
   if (vf->share == 0)
-    { for (ii = 0 ; ii < vf->nDefn ; ++ii)
-	{ li = vf->info[vf->defnOrder[ii]] ;
-	  if (li->isGroup) updateGroupStats (vf, li, false) ;
-	}
-      return;
+    { while (vf->objectFrame)
+	endObject (vf, vf->openObjects[vf->objectFrame]) ; // terminate open objects
+      return; 
     }
 
-  int nthreads = vf->share;
-
-  for (ii = 0 ; ii < vf->nDefn ; ++ii)
-    { i = vf->defnOrder[ii] ;
-      li = vf->info[i] ;
-
-      // update the li->accum
-      I64 n0 = li->accum.count ;
-      for (k = 1 ; k < nthreads ; ++k)
-	{ lk = vf[k].info[i] ;
-	  li->accum.count += lk->accum.count ;
-	  li->accum.total += lk->accum.total ;
-	  if (lk->accum.max > li->accum.max) li->accum.max = lk->accum.max ;
-	}
-
-      if (vf->isBinary && (li->isObject || li->isGroup))
-	{ I64 oldIndexSize = li->indexSize ; // first stitch together the index
-	  li->indexSize = li->accum.count+1 ;
-	  resize (li->index, oldIndexSize, li->indexSize, I64) ;
-	  I64 off = ftello(vf->f) ;
-	  I64 n = n0 ;
-	  for (k = 1 ; k < nthreads ; ++k)
-	    { I64  nk = vf[k].info[i]->accum.count ;
-	      I64 *kIndex = vf[k].info[i]->index ;
-	      for (j = 1 ; j <= nk ; ++j)
-		li->index[++n] = kIndex[j] + off;
-	      off += ftello(vf[k].f);
+  int nthreads = vf->share; // if we get here then nthreads > 1
+  
+  // first we need to complete any objects left open at the end of files and update max count/total
+  OneFile *vk, *vk1 ;
+  OneStat *s, *s1 ;
+  for (k = 1 ; k < nthreads ; ++k)
+    { vk = &vf[k] ; vk1 = &vf[k-1] ;
+      while (vk1->objectFrame) // try to complete objects open at end of preceding file k-1
+	{ OneInfo *li1 = vk1->openObjects[vk1->objectFrame] ; // the object to close in file k-1
+	  // We must find the corresponding object in li. The following is a bit ugly.
+	  for (i = 'A' ; i <= 'z' ; ++i) if (vk1->info[i] == li1) break ; // found it
+	  if (i <= 'z') li = vk->info[i] ; else die ("failed to find li") ;
+	  if (li->isClosed)                                     // yes we can close it
+	    for (s = li->stats, s1 = li1->stats ; s->type ; ++s, ++s1)
+	      { if (vk1->info[(int)s->type]->accum.count - s1->count + s->count0 > s->maxCount)
+		  s->maxCount = vk1->info[(int)s->type]->accum.count - s1->count + s->count0 ;
+		if (s->isList && vk1->info[(int)s->type]->accum.total - s1->total + s->total0 > s->maxTotal)
+		  s->maxTotal = vk1->info[(int)s->type]->accum.total - s1->total + s->total0 ;
+	      }
+	  else // add to this file k's open list, adjusting count/total to include previous counts
+	    { for (s = li->stats, s1 = li1->stats ; s->type ; ++s, ++s1)
+		{ s->count -= vk1->info[(int)s->type]->accum.count - s1->count ;
+		  if (s->isList) s->total -= vk1->info[(int)s->type]->accum.total - s1->total ;
+		}
+	      vk->openObjects[++vk->objectFrame] = li ;
 	    }
+	  --vk1->objectFrame ;
+	}
+      if (k == nthreads-1) // close any remaining open objects at the end of the final file
+	while (vk->objectFrame)
+	  endObject (vk, vk->openObjects[vk->objectFrame]) ;
+      
+      // now see if we need to update max count/total in vf for anything
+      for (ii = 0 ; ii < vf->nDefn ; ++ii)
+	{ i = vf->defnOrder[ii] ;
+	  if (i & 0x80) continue ; // skip 'G' lines
+	  li = vf->info[i] ;
+	  if (li->isObject)
+	    for (s = li->stats, s1 = vk->info[i]->stats ; s->type ; ++s, ++s1)
+	      { if (s1->maxCount > s->maxCount) s->maxCount = s1->maxCount ;
+		if (s->isList && s1->maxTotal > s->maxTotal) s->maxTotal = s1->maxTotal ;
+	      }
+	}
+    }
+  
+  // next update the li->accum - must have fixed up the max count/total first since they use accum
+  I64 n0 = li->accum.count ;
+  for (k = 1 ; k < nthreads ; ++k)
+    { lk = vf[k].info[i] ;
+      li->accum.count += lk->accum.count ;
+      li->accum.total += lk->accum.total ;
+      if (lk->accum.max > li->accum.max) li->accum.max = lk->accum.max ;
+    }
 
-	  if (li->isGroup) 	  // fix the group data
-	    for (jj = 0 ; jj < vf->nDefn ; ++jj)
-	      { j = vf->defnOrder[jj] ;
-		OneInfo *lj = vf->info[j] ;
-		if (lj == li) continue ;
-		if (lj->isObject || lj->isGroup)
-		  { OneInfo *lik1 = vf->info[i], *lik ;
-		    for (k = 1 ; k < nthreads ; ++k)
-		      { lik = vf[k].info[i] ;
-			if (lik1->isInGroup) // must combine counts across the border
-			  { lik1->gCount[j] += lik->gCount0[j] ;
-			    if (lik1->gCount[j] > li->gMaxCount[j])
-			      li->gMaxCount[j] = lik1->gCount[j] ;
-			  }
-			lik1 = lik ;
-		      }
-		    if (lik1->isInGroup) // update the counts at the end as in updateGroupStats()
-		      { lik1->gCount[j] = vf[k].info[j]->accum.count - lik1->gCount[j] ;
-			if (lik1->gCount[j] > li->gMaxCount[j])
-			  li->gMaxCount[j] = lik1->gCount[j] ;
-		      }
-		  }
-		if (lj->listEltSize > 0) // and now the same for total
-		  { OneInfo *lik1 = vf->info[i], *lik ;
-		    for (k = 1 ; k < nthreads ; ++k)
-		      { lik = vf[k].info[i] ;
-			if (lik1->isInGroup) // must combine counts across the border
-			  { lik1->gTotal[j] += lik->gTotal0[j] ;
-			    if (lik1->gTotal[j] > li->gMaxTotal[j])
-			      li->gMaxTotal[j] = lik1->gTotal[j] ;
-			  }
-			lik1 = lik ;
-		      }
-		    if (lik1->isInGroup) // update the counts at the end as in updateGroupStats()
-		      { lik1->gTotal[j] = vf[k].info[j]->accum.total - lik1->gTotal[j] ;
-			if (lik1->gTotal[j] > li->gMaxTotal[j])
-			  li->gMaxTotal[j] = lik1->gTotal[j] ;
-		      }
-		  } // lj->listEltSize > 0
-	      } // li->isGroup, jj
-	} // vf->isBinary && (li->isObject || li->isGroup)
-    } // ii
+  // finally stitch together the index - need to have fixed li->accum.count first
+  if (vf->isBinary && li->isObject)
+    { I64 oldIndexSize = li->indexSize ;
+      li->indexSize = li->accum.count+1 ;
+      resize (li->index, oldIndexSize, li->indexSize, I64) ;
+      I64 off = ftello(vf->f) ;
+      I64 n = n0 ;
+      for (k = 1 ; k < nthreads ; ++k)
+	{ I64  nk = vf[k].info[i]->accum.count ;
+	  I64 *kIndex = vf[k].info[i]->index ;
+	  for (j = 1 ; j <= nk ; ++j)
+	    li->index[++n] = kIndex[j] + off;
+	  off += ftello(vf[k].f);
+	}
+    }
 }
 
 // automatically rewrites header if allowed when writing
@@ -2525,9 +2612,13 @@ void oneFileClose (OneFile *vf)
           free(buf);
         }
 
-      fputc ('\n', vf->f);  // end of file if ascii, end of data marker if binary
+      if (vf->isBinary || vf->line)
+	fputc ('\n', vf->f) ; // terminate last line - end of data marker if binary
       if (vf->isBinary) // write the footer
-        oneWriteFooter (vf);
+        { if (!vf->isLastLineBinary)
+	    fputc ('\n', vf->f);  // need an extra '\n' to ensure end of data marker
+	  oneWriteFooter (vf);
+	}
     }
   
   oneFileDestroy (vf);

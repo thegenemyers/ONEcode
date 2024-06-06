@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: May 15 00:29 2024 (rd109)
+ * Last edited: Jun  1 10:34 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -72,6 +72,13 @@ typedef struct
     I64 total;
   } OneCounts;
 
+typedef struct
+  { I64  count, count0, maxCount ; // used for all contained types
+    I64  total, total0, maxTotal ; // used for all contained list types
+    char type ;
+    bool isList ;
+  } OneStat ;
+
   // OneCodecs are a private package for binary one file compression
 
 typedef void OneCodec; // forward declaration of opaque type for compression codecs
@@ -86,18 +93,13 @@ extern  OneCodec *DNAcodec;
   // Record for a particular line type.  There is at most one list element.
 
 typedef struct
-{   bool      isObject;         // set if this is an object type (O in schema)
-    bool      isGroup;          // set if this is a group type (G in schema)
-    bool      isInGroup;        // set at start of a group, unset at "/ t" lines
-    I64      *index;            // if an object type O or group type G, index of byte offsets
-    I64       gCount0[128];     // if a group, the count of indexed type i up to group 1
-    I64       gTotal0[128];     // if a group, the total of list type i up to group 1
-    I64       gCount[128];      // if a group, the count of indexed type i at start of current group
-    I64       gTotal[128];      // if a group, the total of list type i at start of current group
-    I64       gMaxCount[128];   // if a group, largest value of gCount
-    I64       gMaxTotal[128];   // if a group, largest value of gTotal
-    I64       indexSize;        // size of all the above arrays, if they are not NULL
-
+  { bool      isObject;         // set if this is an object type (O in schema)
+    I64      *index;            // index for objects
+    I64       indexSize;        // size of the index, if present
+    bool      contains[128];    // contains[k] is true if linetype k contained in this object
+    OneStat  *stats;            // 0-terminated list of stats for all contained types within the object
+    bool      isFirst;          // if set then set count0 for any objects closed by this linetype
+    bool      isClosed;         // set if has been closed in this file
     OneCounts accum;            // counts read or written to this moment
     OneCounts given;            // counts read from header
 
@@ -105,14 +107,13 @@ typedef struct
     OneType  *fieldType;        // type of each field
     int       listEltSize;      // size of list field elements (if present, else 0)
     int       listField;        // field index of list
-    char     *comment;          // the comment on the definition line in the schema
     
     bool      isUserBuf;        // flag for whether buffer is owned by user
     I64       bufSize;          // system buffer and size if not user supplied
     void     *buffer;
 
-    OneCodec *listCodec;       // compression codec and flags
-    bool      isUseListCodec;  // on once enough data collected to train associated codec
+    OneCodec *listCodec;        // compression codec and flags
+    bool      isUseListCodec;   // on once enough data collected to train associated codec
     char      binaryTypePack;   // binary code for line type, bit 8 set.
                                 //     bit 0: list compressed
     I64       listTack;         // accumulated training data for this threads codeCodec (master)
@@ -127,8 +128,10 @@ typedef struct OneSchema
     char     **secondary ;
     int        nFieldMax ;
     OneInfo   *info[128] ;
-    int        nDefn ;          // number of G,O,D definition lines			    
-    int        defnOrder[128] ; // so can write out G,O,D lines in same order they were given
+    OneInfo   *currentObject ;      // needed for parsing G lines
+    int        nDefn ;            // number of O,D,G definition lines			    
+    int        defnOrder[128] ;   // so can write out O,D,G lines in same order they were given
+    char      *defnComment[128] ; // comment on the definition line
     struct OneSchema *nxt ;
   } OneSchema ;
 
@@ -157,8 +160,9 @@ typedef struct
     OneReference  *deferred;           // if non-zero then count['>'] entries
     OneField      *field;              // used to hold the current line - accessed by macros
     OneInfo       *info[128];          // all the per-linetype information
-    int            nDefn;              // number of G,O,D definition lines			    
-    int            defnOrder[128];     // so can write out G,O,D lines in same order they were given
+    int            nDefn;              // number of O,D,G definition lines			    
+    int            defnOrder[128];     // so can write out O,D,G lines in same order they were given
+    char          *defnComment[128] ;  // comment on the definition line
     I64            codecTrainingSize;  // amount of data to see before building codec
 
     // fields below here are private to the package
@@ -182,6 +186,8 @@ typedef struct
     I64    intListBytes;           // number of bytes per integer in the compacted INT_LIST
     I64    linePos;                // current line position
     OneHeaderText *headerText;     // arbitrary descriptive text that goes with the header
+    OneInfo *openObjects[128];     // stack of infos for open objects
+    int    objectFrame;            // index into openObjects, pointing to current object info
 
     char   binaryTypeUnpack[256];  // invert binary line code to ASCII line character.
     int    share;                  // index if slave of threaded write, +nthreads > 0 if master
