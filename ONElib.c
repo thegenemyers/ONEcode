@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Jun 25 00:54 2024 (rd)
+ * Last edited: Jun 27 17:10 2024 (rd)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -1406,7 +1406,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 		    vf->field = new (vf->nFieldMax, OneField) ;
 		  }
 	      }
-	    if (oneReadComment (vf)) vs->defnComment[vs->nDefn-1] = strdup (oneReadComment (vf)) ;
+	    if (oneReadComment (vf)) vf->defnComment[vf->nDefn-1] = strdup (oneReadComment (vf)) ;
 	  }
 	  break ;
 
