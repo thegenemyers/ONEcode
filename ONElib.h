@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Jun  1 10:34 2024 (rd109)
+ * Last edited: Jun 25 00:15 2024 (rd)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -128,7 +128,7 @@ typedef struct OneSchema
     char     **secondary ;
     int        nFieldMax ;
     OneInfo   *info[128] ;
-    OneInfo   *currentObject ;      // needed for parsing G lines
+    OneInfo   *currentObject ;    // needed for parsing G lines
     int        nDefn ;            // number of O,D,G definition lines			    
     int        defnOrder[128] ;   // so can write out O,D,G lines in same order they were given
     char      *defnComment[128] ; // comment on the definition line
