@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Jun  2 07:51 2024 (rd109)
+ * Last edited: Jun 19 17:51 2024 (rd)
  * * May 15 02:26 2024 (rd109): incorporate rd utilities so stand alone
  * Created: Thu Feb 21 22:40:28 2019 (rd109)
  *-------------------------------------------------------------------
@@ -71,7 +71,7 @@ int main (int argc, char **argv)
   char *schemaFileName = 0 ;
   bool  isNoHeader = false, isHeaderOnly = false, isWriteSchema = false, 
     isBinary = false, isVerbose = false ;
-  char  indexType ;
+  char  indexType = 0 ;
   IndexList *objList = 0 ;
   
   timeUpdate (0) ;
