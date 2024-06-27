@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Jun  2 07:49 2024 (rd109)
+ * Last edited: Jun 27 17:10 2024 (rd)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -438,6 +438,8 @@ void oneSchemaDestroy (OneSchema *vs)
 	  free (vs->secondary) ;
 	}
       free(vs->primary);
+      for (i = 0 ; i < vs->nDefn ; ++i)
+	if (vs->defnComment[i]) free (vs->defnComment[i]) ;
       OneSchema *t = vs->nxt ;
       free (vs) ;
       vs = t ;
@@ -696,6 +698,9 @@ static void oneFileDestroy (OneFile *vf)
 	  { OneHeaderText *nxt = t->nxt ; free (t) ; t = nxt ; }
 	}
     }
+
+  for (j = 0 ; j < vf->nDefn ; ++j)
+    if (vf->defnComment[j]) free (vf->defnComment[j]) ;
 
   free(vf->fileType);
   free(vf->subType);
@@ -1401,7 +1406,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 		    vf->field = new (vf->nFieldMax, OneField) ;
 		  }
 	      }
-	    if (oneReadComment (vf)) vf->defnComment[(int)t] = strdup (oneReadComment (vf)) ;
+	    if (oneReadComment (vf)) vf->defnComment[vf->nDefn-1] = strdup (oneReadComment (vf)) ;
 	  }
 	  break ;
 
@@ -2494,7 +2499,7 @@ static void oneWriteFooter (OneFile *vf)
   //   the master file (if a parallel OneFile).
 
 void oneFinalizeCounts(OneFile *vf)
-{ int      i, ii, j, k ;
+{ int      ii, j, k ;
   OneInfo *li, *lk;
 
   if (vf->share < 0)
@@ -2518,8 +2523,10 @@ void oneFinalizeCounts(OneFile *vf)
       while (vk1->objectFrame) // try to complete objects open at end of preceding file k-1
 	{ OneInfo *li1 = vk1->openObjects[vk1->objectFrame] ; // the object to close in file k-1
 	  // We must find the corresponding object in li. The following is a bit ugly.
-	  for (i = 'A' ; i <= 'z' ; ++i) if (vk1->info[i] == li1) break ; // found it
-	  if (i <= 'z') li = vk->info[i] ; else die ("failed to find li") ;
+	  { int i ;
+	    for (i = 'A' ; i <= 'z' ; ++i) if (vk1->info[i] == li1) break ; // found it
+	    if (i <= 'z') li = vk->info[i] ; else die ("failed to find li") ;
+	  }
 	  if (li->isClosed)                                     // yes we can close it
 	    for (s = li->stats, s1 = li1->stats ; s->type ; ++s, ++s1)
 	      { if (vk1->info[(int)s->type]->accum.count - s1->count + s->count0 > s->maxCount)
@@ -2542,7 +2549,7 @@ void oneFinalizeCounts(OneFile *vf)
       
       // now see if we need to update max count/total in vf for anything
       for (ii = 0 ; ii < vf->nDefn ; ++ii)
-	{ i = vf->defnOrder[ii] ;
+	{ int i = vf->defnOrder[ii] ;
 	  if (i & 0x80) continue ; // skip 'G' lines
 	  li = vf->info[i] ;
 	  if (li->isObject)
@@ -2554,27 +2561,32 @@ void oneFinalizeCounts(OneFile *vf)
     }
   
   // next update the li->accum - must have fixed up the max count/total first since they use accum
-  I64 n0 = li->accum.count ;
-  for (k = 1 ; k < nthreads ; ++k)
-    { lk = vf[k].info[i] ;
-      li->accum.count += lk->accum.count ;
-      li->accum.total += lk->accum.total ;
-      if (lk->accum.max > li->accum.max) li->accum.max = lk->accum.max ;
-    }
-
-  // finally stitch together the index - need to have fixed li->accum.count first
-  if (vf->isBinary && li->isObject)
-    { I64 oldIndexSize = li->indexSize ;
-      li->indexSize = li->accum.count+1 ;
-      resize (li->index, oldIndexSize, li->indexSize, I64) ;
-      I64 off = ftello(vf->f) ;
-      I64 n = n0 ;
+  for (ii = 0 ; ii < vf->nDefn ; ++ii)
+    { int i = vf->defnOrder[ii] ;
+      if (i & 0x80) continue ; // skip 'G' lines
+      li = vf->info[i] ;
+      I64 n0 = li->accum.count ;
       for (k = 1 ; k < nthreads ; ++k)
-	{ I64  nk = vf[k].info[i]->accum.count ;
-	  I64 *kIndex = vf[k].info[i]->index ;
-	  for (j = 1 ; j <= nk ; ++j)
-	    li->index[++n] = kIndex[j] + off;
-	  off += ftello(vf[k].f);
+	{ lk = vf[k].info[i] ;
+	  li->accum.count += lk->accum.count ;
+	  li->accum.total += lk->accum.total ;
+	  if (lk->accum.max > li->accum.max) li->accum.max = lk->accum.max ;
+	}
+
+      // finally stitch together the index - need to have fixed li->accum.count first
+      if (vf->isBinary && li->isObject)
+	{ I64 oldIndexSize = li->indexSize ;
+	  li->indexSize = li->accum.count+1 ;
+	  resize (li->index, oldIndexSize, li->indexSize, I64) ;
+	  I64 off = ftello(vf->f) ;
+	  I64 n = n0 ;
+	  for (k = 1 ; k < nthreads ; ++k)
+	    { I64  nk = vf[k].info[i]->accum.count ;
+	      I64 *kIndex = vf[k].info[i]->index ;
+	      for (j = 1 ; j <= nk ; ++j)
+		li->index[++n] = kIndex[j] + off;
+	      off += ftello(vf[k].f);
+	    }
 	}
     }
 }
@@ -4043,3 +4055,4 @@ static void *mydup(size_t n, void *x, size_t size)
 }
 
 /********************* end of file ***********************/
+
