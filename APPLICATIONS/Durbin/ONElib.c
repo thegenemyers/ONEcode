@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Jun 27 17:10 2024 (rd)
+ * Last edited: Jun 27 22:12 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -214,7 +214,9 @@ static void schemaAddInfoFromLine (OneSchema *vs, OneFile *vf, char t, char type
 	     i, n, s, vf->line, t) ;
     }
 
-  schemaAddInfoFromArray (vs, n, a, t, type) ;
+  if (oneReadComment (vf) && ((t >= 'A' && t <= 'Z') || (t >= 'a' && t <= 'z')))
+    vs->defnComment[vs->nDefn] = strdup (oneReadComment(vf)) ;
+  schemaAddInfoFromArray (vs, n, a, t, type) ;  
 }
 
 static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
@@ -258,7 +260,6 @@ static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
     case 'O': // object type
     case 'D': // standard record type
       schemaAddInfoFromLine (vs, vf, oneChar(vf,0), vf->lineType) ;
-      if (oneReadComment (vf)) vs->defnComment[vs->nDefn-1] = strdup (oneReadComment(vf)) ;
       break ;
     default:
       die ("unrecognized schema line %d starting with %c", vf->line, vf->lineType) ;
@@ -1385,8 +1386,11 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 
 	case '~': // schema definition line
 	  { char t = oneChar(vf,1) ;
+	    if (!(t >= 'A' && t <= 'Z') && !(t >= 'a' && t <= 'z'))
+	      die ("type symbol %c in schema definition line %d is not a letter", t, vf->line) ;
 	    if (oneChar(vf,0) == 'G')
 	      { schemaAddGroup (vsFile, t) ;
+		if (oneReadComment (vf)) vf->defnComment[vf->nDefn] = strdup (oneReadComment (vf)) ;
 		vf->defnOrder[vf->nDefn++] = t | 0x80 ; // definition order
 	      }
 	    else
@@ -1406,7 +1410,6 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 		    vf->field = new (vf->nFieldMax, OneField) ;
 		  }
 	      }
-	    if (oneReadComment (vf)) vf->defnComment[vf->nDefn-1] = strdup (oneReadComment (vf)) ;
 	  }
 	  break ;
 
@@ -2194,12 +2197,12 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
   
   assert (vf->isWrite) ;
   assert (!vf->isFinal || !isalpha(t)) ;
-
+  
   li = vf->info[(int) t];
   if (!li) die ("oneWriteLine() attempting to write unkown linetype %c", t) ;
 
   if (li->isFirst) closeObjects (vf, t) ;
-  if (vf->objectFrame && !(vf->openObjects[vf->objectFrame]->contains[(int)t]))
+  while (vf->objectFrame && !(vf->openObjects[vf->objectFrame]->contains[(int)t]))
     endObject (vf, vf->openObjects[vf->objectFrame]) ;
   li->accum.count += 1;
   if (li->isObject) startObject (vf, li) ;
