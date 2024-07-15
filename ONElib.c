@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Jun 27 19:03 2024 (rd109)
+ * Last edited: Jun 27 22:12 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -215,7 +215,7 @@ static void schemaAddInfoFromLine (OneSchema *vs, OneFile *vf, char t, char type
     }
 
   if (oneReadComment (vf) && ((t >= 'A' && t <= 'Z') || (t >= 'a' && t <= 'z')))
-    vs->defnComment[vs->nDefn-1] = strdup (oneReadComment(vf)) ;
+    vs->defnComment[vs->nDefn] = strdup (oneReadComment(vf)) ;
   schemaAddInfoFromArray (vs, n, a, t, type) ;  
 }
 
@@ -2197,12 +2197,12 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
   
   assert (vf->isWrite) ;
   assert (!vf->isFinal || !isalpha(t)) ;
-
+  
   li = vf->info[(int) t];
   if (!li) die ("oneWriteLine() attempting to write unkown linetype %c", t) ;
 
   if (li->isFirst) closeObjects (vf, t) ;
-  if (vf->objectFrame && !(vf->openObjects[vf->objectFrame]->contains[(int)t]))
+  while (vf->objectFrame && !(vf->openObjects[vf->objectFrame]->contains[(int)t]))
     endObject (vf, vf->openObjects[vf->objectFrame]) ;
   li->accum.count += 1;
   if (li->isObject) startObject (vf, li) ;
