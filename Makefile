@@ -35,7 +35,7 @@ $(LIB): $(LIB_OBJS)
 
 ### programs
 
-ONEstat: ONEstat.c utils.o $(LIB)
+ONEstat: ONEstat.c $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^
 
 ONEview: ONEview.c $(LIB)
