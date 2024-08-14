@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: May 19 23:26 2024 (rd109)
+ * Last edited: Aug 14 10:12 2024 (rd109)
  * * Dec 20 23:23 2022 (rd109): fully revised SeqPack and QualPack
  * Created: Sat Nov 10 08:51:49 2018 (rd109)
  *-------------------------------------------------------------------
@@ -104,10 +104,10 @@ static char *seqioSchemaText =
   "1 3 def 1 0  schema for seqio\n"
   ".\n"
   "P 3 seq SEQUENCE\n"
-  "O S 1 3 DNA             sequence: the DNA string\n"
-  "D I 1 6 STRING          id: (optional) sequence identifier\n"
-  "D Q 1 6 STRING          quality: Q values (ascii string = q+33)\n"
-  "D N 2 3 INT 4 CHAR      non-acgt base\n" ;
+  "O S 1 3 DNA               sequence: the DNA string\n"
+  "D I 1 6 STRING            id: (optional) sequence identifier\n"
+  "D Q 1 6 STRING            quality: Q values (ascii string = q+33)\n"
+  "D N 3 3 INT 4 CHAR 3 INT  non-acgt base: pos (0-indexed), base, number\n" ;
 
 SeqIO *seqIOadoptOneFile (void *handle, int* convert, int qualThresh) ;
 

@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Jun  7 00:30 2024 (rd109)
+ * Last edited: Aug 14 10:38 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -263,8 +263,9 @@ bool seqIOread (SeqIO *si)
 	      if (desc) strcpy (si->buf+si->descStart, desc) ; else si->buf[si->descStart] = 0 ;
 	    }
 	  if (vf->lineType == 'N')
-	    { if (si->convert) si->seqBuf[oneInt(vf,0)] = si->convert[(int)oneChar(vf,1)] ;
-	      else si->seqBuf[oneInt(vf,0)] = oneChar(vf,1) ;
+	    { int n = oneInt(vf,2) ;
+	      char base = si->convert ? si->convert[(int)oneChar(vf,1)] : oneChar(vf,1) ;
+	      while (n--) si->seqBuf[oneInt(vf,0)+n] = base ;
 	    }
 	}
       return true ;
@@ -523,7 +524,11 @@ void seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *q
 	}
       for (i = 0 ; i < seqLen ; ++i) // write exceptions for non-ACGT characters
 	if (!acgtCheck[seq[i]])
-	  { oneInt(vf,0) = i ; oneChar(vf,1) = seq[i] ;
+	  { oneInt(vf,0) = i ;
+	    char c = oneChar(vf,1) = seq[i] ;
+	    I64 n = 1 ;
+	    while (++i < seqLen && seq[i] == c) n++ ;
+	    oneInt(vf,2) = n ;
 	    oneWriteLine (vf, 'N', 0, 0) ;
 	  }
       return ;

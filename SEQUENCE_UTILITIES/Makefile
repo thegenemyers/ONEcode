@@ -52,7 +52,7 @@ test: seqstat seqconvert seqextract
 	./seqconvert -o A.fa.gz small.1seq
 	gunzip A.fa.gz
 	diff A.fa small.fa
-	./seqconvert -1 -H -o B.1seq small.1seq
+	./seqconvert -t -1 -H -o B.1seq small.1seq
 	./seqconvert -fa B.1seq
 	./seqconvert -U -o C.fa B.1seq
 	diff C.fa small.fa

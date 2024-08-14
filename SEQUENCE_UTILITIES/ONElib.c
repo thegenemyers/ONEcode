@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Jun 27 22:12 2024 (rd109)
+ * Last edited: Aug 11 19:05 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -22,7 +22,7 @@
  *
  ****************************************************************************************/
 
-#ifdef LINUX
+#ifdef __linux__
 #define _GNU_SOURCE  // needed for vasprintf() on Linux
 #endif
 
@@ -335,8 +335,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   fprintf (vf->f, "D - 1 3 INT                        binary file: offset of start of footer\n") ;
   fprintf (vf->f, "D & 2 4 CHAR 8 INT_LIST            binary file: li->index\n") ;
   fprintf (vf->f, "D ; 2 4 CHAR 6 STRING              binary file: list codec\n") ;
-  fprintf (vf->f, "D | 1 6 STRING                     binary file: comment\n") ;
-  fprintf (vf->f, "D / 1 4 CHAR                       general: end of group, char is type\n") ;
+  fprintf (vf->f, "D / 1 6 STRING                     binary file: comment\n") ;
   if (fseek (vf->f, 0, SEEK_SET)) die ("ONE schema failure: cannot rewind tmp file") ;
   while (oneReadLine (vf))
     schemaLoadRecord (vs, vf) ;
@@ -449,7 +448,6 @@ void oneSchemaDestroy (OneSchema *vs)
 
 static void writeInfoSpec (FILE *f, OneFile *vf, char ci, char *comment) // also used in writeHeader()
 {
-
   if (f == vf->f) fprintf (f, "\n~ ") ; // writing the schema into the file header
   else fprintf (f, "\n") ;              // just writing a schema file
 
@@ -467,7 +465,7 @@ static void writeInfoSpec (FILE *f, OneFile *vf, char ci, char *comment) // also
 		 (int)strlen(oneTypeString[vi->fieldType[i]]), oneTypeString[vi->fieldType[i]]) ;
     }
   if (comment)
-    oneWriteComment (vf, "%s", comment) ;
+    fprintf (f, " %s", comment) ;
 }
 
 void oneFileWriteSchema (OneFile *vf, char *filename)
@@ -499,7 +497,8 @@ static void initialiseStats (OneFile *vf)
   OneInfo *li, *lj ;
 
   // first ensure the contains[] arrays follow the defn lines
-  OneInfo *currentInfo = 0 ;
+  if (!vf->info[0]) { vf->info[0] = infoCreate(0) ; vf->info[0]->isObject = true ; }
+  OneInfo *currentInfo = vf->info[0] ;
   for (i = 0 ; i < vf->nDefn ; ++i)
     { k = vf->defnOrder[i] ;
       if (k & 0x80) currentInfo->contains[k & 0x7f] = true ;
@@ -725,7 +724,7 @@ void parseError (OneFile *vf, char *format, ...)
   va_end (args);
 
   vf->lineBuf[vf->linePos] = '\0';
-  fprintf (stderr, ", line %" PRId64 ": %s\n", vf->line, vf->lineBuf);
+  fprintf (stderr, ", line %lld: %s\n", vf->line, vf->lineBuf);
 
   exit (1);
 }
@@ -1046,7 +1045,7 @@ static void readStringList(OneFile *vf, char t, I64 len)
   free (string);
 }
 
-static bool addProvenance(OneFile *vf, OneProvenance *from, int n) ; // need forward declaration
+bool addProvenance(OneFile *vf, OneProvenance *from, int n) ; // need forward declaration
 
 char oneReadLine (OneFile *vf)
 { bool      isAscii;
@@ -1167,19 +1166,25 @@ char oneReadLine (OneFile *vf)
                 readStringList (vf, t, listLen);
               else if (x & 0x1)    				  // list is compressed
                 { vf->nBits = ltfRead (vf->f) ;
-                  if (fread (vf->codecBuf, ((vf->nBits+7) >> 3), 1, vf->f) != 1)
+		  size_t bytes = (vf->nBits+7) >> 3 ;
+		  if (bytes > (size_t) vf->codecBufSize)
+		    { if (vf->codecBuf) free (vf->codecBuf) ;
+		      vf->codecBufSize = bytes + 1 ;
+		      vf->codecBuf = new (vf->codecBufSize, void) ;
+		    }
+                  if (fread (vf->codecBuf, bytes, 1, vf->f) != 1)
                     die ("ONE read error: fail to read compressed list");
                 }
               else if (li->fieldType[li->listField] == oneINT_LIST)
                 { I64 listSize  = (listLen-1) * vf->intListBytes ;
                   if ((I64) fread (&(((I64*)li->buffer)[1]), 1, listSize, vf->f) != listSize)
-                    die ("ONE read error: failed to read list size %" PRId64 "", listSize);
+                    die ("ONE read error: failed to read list size %lld", listSize);
 		  decompactIntList (vf, listLen, li->buffer, vf->intListBytes);
                 }
 	      else
                 { I64 listSize  = listLen * li->listEltSize ;
                   if ((I64) fread (li->buffer, 1, listSize, vf->f) != listSize)
-                    die ("ONE read error: failed to read list size %" PRId64 "", listSize);
+                    die ("ONE read error: failed to read list size %lld", listSize);
                 }
             }
 
@@ -1541,8 +1546,11 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	  if (li->listCodec && size < li->given.max * li->listEltSize)
 	    size = li->given.max * li->listEltSize;
 	}
-    vf->codecBufSize = size+1;
-    vf->codecBuf     = new (vf->codecBufSize, void);  // add one for worst case codec usage
+    if (size >= vf->codecBufSize)
+      { if (vf->codecBuf) free (vf->codecBuf) ;
+	vf->codecBufSize = size+1;
+	vf->codecBuf     = new (vf->codecBufSize, void);  // add one for worst case codec usage
+      }
   }
 
   // if parallel, allocate a OneFile array for parallel thread objects, switch vf to head of array
@@ -1909,7 +1917,7 @@ bool oneFileCheckSchemaText (OneFile *vf, const char *textSchema)
  *
  **********************************************************************************/
 
-static bool addProvenance(OneFile *vf, OneProvenance *from, int n)
+bool addProvenance(OneFile *vf, OneProvenance *from, int n)
 { I64 i ;
   OneInfo   *l = vf->info['!'];
   I64         o = l->accum.count;
@@ -2025,18 +2033,18 @@ static bool writeCounts (OneFile *vf, int i) // always write counts in ascii
   OneInfo *li = vf->info[i] ;
 
   if (li != NULL && li->given.count > 0)
-    { fprintf (vf->f, "# %c %" PRId64 "\n", i, li->given.count);
+    { fprintf (vf->f, "# %c %lld\n", i, li->given.count);
       if (li->given.max > 0)
-	fprintf (vf->f, "@ %c %" PRId64 "\n", i, li->given.max);
+	fprintf (vf->f, "@ %c %lld\n", i, li->given.max);
       if (li->given.total > 0)
-	fprintf (vf->f, "+ %c %" PRId64 "\n", i, li->given.total);
+	fprintf (vf->f, "+ %c %lld\n", i, li->given.total);
       if (li->isObject)
 	{ OneStat *s ;
 	  for (s = li->stats ; s->type ; ++s)
 	    { if (s->maxCount)
-		fprintf (vf->f, "%% %c # %c %" PRId64 "\n", i, s->type, s->maxCount);
+		fprintf (vf->f, "%% %c # %c %lld\n", i, s->type, s->maxCount);
 	      if (s->maxTotal)
-		fprintf (vf->f, "%% %c + %c %" PRId64 "\n", i, s->type, s->maxTotal);
+		fprintf (vf->f, "%% %c + %c %lld\n", i, s->type, s->maxTotal);
 	    }
 	}
       return true ;
@@ -2083,7 +2091,7 @@ static void writeHeader (OneFile *vf)
     { OneReference *r = vf->reference;
       n = vf->info['<']->accum.count;
       for (i = 0; i < n; i++, r++)
-	fprintf (vf->f, "\n< %lu %s %" PRId64 "", strlen(r->filename), r->filename, r->count);
+	fprintf (vf->f, "\n< %lu %s %lld", strlen(r->filename), r->filename, r->count);
       
       r = vf->deferred;
       n = vf->info['>']->accum.count;
@@ -2125,7 +2133,7 @@ static int writeStringList (OneFile *vf, char t, int len, char *buf)
   for (j = 0; j < len; j++)
     { sLen = strlen (buf);
       totLen += sLen;
-      nByteWritten += fprintf (vf->f, " %" PRId64 " %s", sLen, buf);
+      nByteWritten += fprintf (vf->f, " %lld %s", sLen, buf);
       buf += sLen + 1;
     }
 
@@ -2294,7 +2302,7 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
 	    }
 	  else
 	    { if (fwrite (listBuf, listSize, 1, vf->f) != 1)
-		die ("ONE write error: failed to write list field %d listLen %" PRId64 " listSize %" PRId64 " listBuf %lx",
+		die ("ONE write error: failed to write list field %d listLen %lld listSize %lld listBuf %lx",
 		     li->listField, listLen, listSize, listBuf);
 	      vf->byte += listSize;
 	      if (li->listCodec != NULL)
@@ -2371,7 +2379,7 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
         switch (li->fieldType[i])
 	  {
 	  case oneINT:
-            fprintf (vf->f, " %" PRId64 "", vf->field[i].i);
+            fprintf (vf->f, " %lld", vf->field[i].i);
             break;
           case oneREAL:
             fprintf (vf->f, " %f", vf->field[i].r);
@@ -2388,16 +2396,16 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
             if (listLen > li->accum.max)
               li->accum.max = listLen;
 
-	    fprintf (vf->f, " %" PRId64 "", listLen);
+	    fprintf (vf->f, " %lld", listLen);
             if (li->fieldType[i] == oneSTRING || li->fieldType[i] == oneDNA)
               { if (listLen > INT_MAX)
-                  die ("ONE write error: string length %" PRId64 " > current max %d", listLen, INT_MAX);
+                  die ("ONE write error: string length %lld > current max %d", listLen, INT_MAX);
                 fprintf (vf->f, " %.*s", (int) listLen, (char *) listBuf);
               }
             else if (li->fieldType[i] == oneINT_LIST)
               { I64 *b = (I64 *) listBuf;
                 for (j = 0; j < listLen ; ++j)
-                  fprintf (vf->f, " %" PRId64 "", b[j]);
+                  fprintf (vf->f, " %lld", b[j]);
               }
             else if (li->fieldType[i] == oneREAL_LIST)
               { double *b = (double *) listBuf;
@@ -2463,6 +2471,7 @@ static void oneWriteFooter (OneFile *vf)
 
   //  first the per-linetype information
   codecBuf = new (vcMaxSerialSize()+1, char) ; // +1 for added up unused 0-terminator
+  bool isWrittenIndexCodec = false ;
   for (k = 0; k < vf->nDefn ; ++k)
     { i  = vf->defnOrder[k] ;
       if (i & 0x80) continue ; // skip the 'G' lines
@@ -2473,6 +2482,12 @@ static void oneWriteFooter (OneFile *vf)
 	  if (li->index)
 	    { oneChar(vf,0) = (char) i ;
 	      oneWriteLine (vf, '&', li->accum.count+1, li->index) ;
+	    }
+	  if (vf->info['&']->isUseListCodec && !isWrittenIndexCodec)
+	    { oneChar(vf,0) = '&' ;
+              n = vcSerialize (vf->info['&']->listCodec, codecBuf);
+              oneWriteLine (vf, ';', n, codecBuf);
+	      isWrittenIndexCodec = true ;
 	    }
           if (li->isUseListCodec && li->listCodec != DNAcodec)
             { oneChar(vf,0) = i;
@@ -2488,6 +2503,10 @@ static void oneWriteFooter (OneFile *vf)
       n = vcSerialize (li->listCodec, codecBuf);
       oneWriteLine (vf, ';', n, codecBuf);
     }
+
+  // NB we don't consider here the possibility of writing a codec for codecs.
+  // This should be OK. Each codec is ~300 bytes, and we can have at most 56 of them.
+  // Not enough to trigger codec building.
   
   free (codecBuf) ;
 
@@ -2696,10 +2715,10 @@ int       vcMaxSerialSize();
 int       vcSerialize(OneCodec *vc, void *out);
 OneCodec *vcDeserialize(void *in);
 
-typedef uint64_t  uint64;
-typedef uint32_t  uint32;
-typedef uint16_t  uint16;
-typedef uint8_t   uint8;
+typedef unsigned long long  uint64;
+typedef unsigned int        uint32;
+typedef unsigned short      uint16;
+typedef unsigned char       uint8;
 
 #define HUFF_CUTOFF  12     //  This cannot be larger than 16 !
 
@@ -2914,7 +2933,7 @@ void vcCreateCodec(OneCodec *vc, int partial)
     fprintf(stderr,"\nCoin Filter:\n");
     fprintf(stderr,"  Row %2d:",HUFF_CUTOFF);
     for (n = 0; n < ncode; n++)
-      fprintf(stderr," %" PRId64 "*",countb[n]);
+      fprintf(stderr," %lld*",countb[n]);
     fprintf(stderr,"\n");
 #endif
 
@@ -2944,7 +2963,7 @@ void vcCreateCodec(OneCodec *vc, int partial)
 #ifdef DEBUG
         fprintf(stderr,"  Row %2d:",L);
         for (n = 0; n <= llen; n++)
-          fprintf(stderr," %" PRId64 "%c",lcnt[n],matrix[L][n]?'*':'+');
+          fprintf(stderr," %lld%c",lcnt[n],matrix[L][n]?'*':'+');
         fprintf(stderr,"\n");
 #endif
       }
@@ -3088,9 +3107,9 @@ void vcPrint(OneCodec *vc, FILE *to)
       for (i = 0; i < 256; i++)
         if (hist[i] > 0)
           { if (isprint(i))
-              fprintf(to,"      %c: %12" PRIu64 " %5.1f%%\n",i,hist[i],(hist[i]*100.)/count);
+              fprintf(to,"      %c: %12llu %5.1f%%\n",i,hist[i],(hist[i]*100.)/count);
             else
-              fprintf(to,"    %3d: %12" PRIu64 " %5.1f%%\n",i,hist[i],(hist[i]*100.)/count);
+              fprintf(to,"    %3d: %12llu %5.1f%%\n",i,hist[i],(hist[i]*100.)/count);
           }
     }
 
@@ -3125,7 +3144,7 @@ void vcPrint(OneCodec *vc, FILE *to)
         }
     }
   if (hashist)
-    fprintf(to,"\nTotal Bytes = %" PRIu64 " (%.2f%%)\n",(total_bits-1)/8+1,(100.*total_bits)/ucomp_bits);
+    fprintf(to,"\nTotal Bytes = %llu (%.2f%%)\n",(total_bits-1)/8+1,(100.*total_bits)/ucomp_bits);
 }
 
 
@@ -3960,7 +3979,7 @@ int main (int argc, char *argv[])
 	}
     }
   fclose (f) ;
-  printf ("wrote %" PRId64 " bytes: ", tot) ;
+  printf ("wrote %lld bytes: ", tot) ;
   timeUpdate (stdout) ;
 
   x = atoi(argv[1]) ;
@@ -4003,7 +4022,7 @@ int main (int argc, char *argv[])
     }
   fclose (f) ;
 
-  printf ("read  %" PRId64 " bytes: ", tot) ;
+  printf ("read  %lld bytes: ", tot) ;
   timeUpdate (stdout) ;
 }
 #endif // TEST_LTF
@@ -4034,7 +4053,7 @@ static void *myalloc(size_t size)
 
   p = malloc(size);
   if (p == NULL && size != 0 )
-    die("ONElib myalloc failure requesting %d bytes - totalAlloc %" PRId64 "", size, totalAlloc);
+    die("ONElib myalloc failure requesting %d bytes - totalAlloc %lld", size, totalAlloc);
   nAlloc     += 1;
   totalAlloc += size;
   return (p);

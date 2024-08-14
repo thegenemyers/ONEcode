@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: Jun 27 21:05 2024 (rd109)
+ * Last edited: Aug 14 12:00 2024 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -28,21 +28,22 @@ int main (int argc, char *argv[])
   storeCommandLine (argc, argv) ;
   --argc ; ++argv ;
 
-  timeUpdate (stderr) ;
+  timeUpdate (stdout) ;
 
   if (!argc || !strcmp(*argv,"-h") || !strcmp(*argv,"--help"))
     { fprintf (stderr, "Usage: seqconvert [-fa|fq|b|1] [-Q T] [-H|U] [-K|J] [-KT T] [-z] [-S] [-o outfile] [infile]\n") ;
       fprintf (stderr, "   autodetects input file type: fasta/q (.gz), binary, ONEcode, BAM/SAM\n") ;
       fprintf (stderr, "   .gz ending outfile name implies gzip compression\n") ;
-      fprintf (stderr, "   -fa output as fasta, -fq as fastq, -b as binary, -1 as ONEcode\n") ;
+      fprintf (stderr, "   -fa : output as fasta, -fq as fastq, -b as binary, -1 as ONEcode\n") ;
       fprintf (stderr, "      else .fa or .fq in outfile name imply fasta, fastq else ONEcode\n") ;
-      fprintf (stderr, "   -Q sets the quality threshold for single bit quals in -b option [30]\n") ;
-      fprintf (stderr, "   -S silent - else it reports to stderr on what it is doing\n") ;
-      fprintf (stderr, "   -H homopolymer compress (hoco) - stores run lengths if ONEcode\n") ;
-      fprintf (stderr, "   -U homopolymer uncompress - only works on ONEcode input\n") ;
-      fprintf (stderr, "   -K scaffold break sequences at >KT N's - stores breaks if ONEcode\n") ;
-      fprintf (stderr, "   -J scaffold rejoin - only works on ONEcode input\n") ;
-      fprintf (stderr, "   -KT sets the threshold for scaffold breaking [20]\n") ;
+      fprintf (stderr, "   -Q  : sets the quality threshold for single bit quals in -b option [30]\n") ;
+      fprintf (stderr, "   -S  : silent - else it reports to stderr on what it is doing\n") ;
+      fprintf (stderr, "   -H  : homopolymer compress (hoco) - stores run lengths if ONEcode\n") ;
+      fprintf (stderr, "   -U  : homopolymer uncompress - only works on ONEcode input\n") ;
+      fprintf (stderr, "   -t  : show time and memory usage\n") ;
+      // fprintf (stderr, "   -K  : scaffold break sequences at >KT N's - stores breaks if ONEcode\n") ;
+      // fprintf (stderr, "   -J  : scaffold rejoin - only works on ONEcode input\n") ;
+      // fprintf (stderr, "   -KT : sets the threshold for scaffold breaking [20]\n") ;
       fprintf (stderr, "   NB gzip is not compatible with binary\n") ;
       fprintf (stderr, "   if no infile then use stdin\n") ;
       fprintf (stderr, "   if no -o option then use stdout and -z implies gzip\n");
@@ -56,10 +57,12 @@ int main (int argc, char *argv[])
   bool isUnHoco = false ;
   bool isScaffold = false ;
   bool isJoin = false ;
+  bool isTime = false ;
   char *inFileName = "-" ;
   char *outFileName = "-z" ;
   int qualThresh = 30 ;
   int scaffThresh = 20 ;
+  
   while (argc)
     { if (!strcmp (*argv, "-fa")) type = FASTA ;
       else if (!strcmp (*argv, "-fq")) type = FASTQ ;
@@ -70,10 +73,11 @@ int main (int argc, char *argv[])
       else if (!strcmp (*argv, "-z")) isGzip = true ;
       else if (!strcmp (*argv, "-H")) isHoco = true ;
       else if (!strcmp (*argv, "-U")) isUnHoco = true ;
-      else if (!strcmp (*argv, "-K")) isScaffold = true ;
-      else if (!strcmp (*argv, "-J")) isJoin = true ;
-      else if (!strcmp (*argv, "-KT") && argc > 1)
-	{ --argc ; ++argv ; scaffThresh = atoi (*argv) ; }
+      else if (!strcmp (*argv, "-t")) isTime = true ;
+      //      else if (!strcmp (*argv, "-K")) isScaffold = true ;
+      //      else if (!strcmp (*argv, "-J")) isJoin = true ;
+      //      else if (!strcmp (*argv, "-KT") && argc > 1)
+      //	{ --argc ; ++argv ; scaffThresh = atoi (*argv) ; }
       else if (!strcmp (*argv, "-o") && argc > 1)
 	{ --argc ; ++argv ; outFileName = *argv ; }
       else if (!strcmp (*argv, "-S")) isVerbose = false ;
@@ -146,14 +150,13 @@ int main (int argc, char *argv[])
   if (isVerbose)
     { fprintf (stderr, "written %" PRIu64 " sequences to file type %s, total length %" PRIu64 ", max length %" PRIu64 "\n",
 	       siOut->nSeq, seqIOtypeName[siOut->type], siOut->totSeqLen, siOut->maxSeqLen) ;
-  
-      timeTotal (stderr) ;
     }
 
   seqIOclose (siIn) ;
   
  cleanup:
   seqIOclose (siOut) ;
+  if (isTime) timeTotal (stdout) ;
 }
 
 /****************/
@@ -188,11 +191,11 @@ static char *hocoSchemaText =
   "1 3 def 1 0  schema for seqconvert to hoco\n"
   ".\n"
   "P 3 seq SEQUENCE\n"
-  "O S 1 3 DNA             sequence: the DNA string\n"
-  "D I 1 6 STRING          id: (optional) sequence identifier\n"
-  "D Q 1 6 STRING          quality: Q values (ascii string = q+33)\n"
-  "D N 2 3 INT 4 CHAR      non-acgt base\n"
-  "D H 2 3 INT 8 INT_LIST  original length, list of run lengths\n" ;
+  "O S 1 3 DNA               sequence: the DNA string\n"
+  "D I 1 6 STRING            id: (optional) sequence identifier\n"
+  "D Q 1 6 STRING            quality: Q values (ascii string = q+33)\n"
+  "D N 3 3 INT 4 CHAR 3 INT  non-acgt base\n"
+  "D H 2 3 INT 8 INT_LIST    original length, list of run lengths\n" ;
 
 static void writeHoco (SeqIO *si, U64 seqLen, U64 runLen, U64 *runLengths)
 {
@@ -238,6 +241,7 @@ static void convertUnHoco (SeqIO *siIn, SeqIO *siOut)
       
       while (oneReadLine (vf) && vf->lineType != 'H' && vf->lineType != 'S')
 	if (vf->lineType == 'I') storeIdLine (siIn, vf) ;
+	else if (vf->lineType == 'N') tbuf->buf[oneInt(vf,0)] = oneChar(vf,1) ; // will only be one
       if (vf->lineType == 'H')
 	{ assert (oneLen(vf) == tlen) ;
 	  slen = oneInt(vf,0) ;
