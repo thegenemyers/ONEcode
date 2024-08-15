@@ -46,7 +46,7 @@ ONEview: ONEview.c $(LIB)
 test: ONEview TEST
 	./ONEview TEST/small.seq
 	./ONEview -b -o TEST/ZZ-small.1seq TEST/small.seq
-	cd TEST ; source t1.sh ; source t2.sh ; cd ..
+	bash -c "cd TEST ; source t1.sh ; source t2.sh ; cd .."
 
 ONEcpptest.cpp: ONElib.hpp
 	\ln -s ONElib.hpp $@
