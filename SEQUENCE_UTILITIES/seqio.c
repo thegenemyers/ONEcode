@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Aug 14 10:38 2024 (rd109)
+ * Last edited: Aug 18 21:02 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -116,7 +116,7 @@ SeqIO *seqIOopenRead (char *filename, int* convert, bool isQual)
 	  si->maxSeqLen = vf->info['S']->given.max ;
 	  si->seqBuf = new0 (si->maxSeqLen+1,char) ;
 	}
-      if (si->isQual && vf->info['Q']->given.count)
+      if (si->isQual && vf->info['Q'] && vf->info['Q']->given.count)
 	si->qualBuf = new0 (si->maxSeqLen+1,char) ;
       else
 	si->isQual = false ;
@@ -593,7 +593,7 @@ char* seqRevComp (char* s, U64 len) // index and text (including ambig)
 {
   char *r = new(len,char) ;
   r += len ;
-  while (len--) *--r = complementBase[*s++] ;
+  while (len--) *--r = complementBase[(int)*s++] ;
   return r ;
 }
 
@@ -636,16 +636,17 @@ U8* seqPack (SeqPack *sp, char *s, U8 *u, U64 len) /* compress s into (len+3)/4 
 {
   if (!u) u = new((len+3)/4,U8) ;
   U8 *u0 = u ;
-  int i ;
   while (len >= 4)
-    { *u++ = packConv[s[0]] | (packConv[s[1]] << 2) | (packConv[s[2]] << 4) | (packConv[s[3]] << 6) ;
+    { *u++ = packConv[(int)s[0]] | (packConv[(int)s[1]] << 2) |
+	(packConv[(int)s[2]] << 4) | (packConv[(int)s[3]] << 6) ;
       len -= 4 ; s += 4 ;
     }
   switch (len)
     {
-    case 3: *u++ = packConv[s[0]] | (packConv[s[1]] << 2) | (packConv[s[2]] << 4) ; break ;
-    case 2: *u++ = packConv[s[0]] | (packConv[s[1]] << 2) ; break ;
-    case 1: *u++ = packConv[s[0]] ; break ;
+    case 3: *u++ = packConv[(int)s[0]] | (packConv[(int)s[1]] << 2) |
+	(packConv[(int)s[2]] << 4) ; break ;
+    case 2: *u++ = packConv[(int)s[0]] | (packConv[(int)s[1]] << 2) ; break ;
+    case 1: *u++ = packConv[(int)s[0]] ; break ;
     case 0: break ;
     }
   return u0 ;
@@ -1082,10 +1083,10 @@ bool bamRead (SeqIO *si)
 
   char *bseq = (char*) bam_get_seq (bf->b) ;
   char *s = si->seqBuf ;
-  if (bf->b->core.flag & BAM_FREVERSE)
-    for (i = si->seqLen ; i-- ; )
-      *s++ = binaryAmbig2text[(int)binaryAmbigComplement[(int)bam_seqi(bseq,i)]] ;
-  else
+  //  if (bf->b->core.flag & BAM_FREVERSE)
+  //    for (i = si->seqLen ; i-- ; )
+  //      *s++ = binaryAmbig2text[(int)binaryAmbigComplement[(int)bam_seqi(bseq,i)]] ;
+  //  else
     for (i = 0 ; i < si->seqLen ; ++i)
       *s++ = binaryAmbig2text[bam_seqi(bseq,i)] ;
   if (si->convert)
