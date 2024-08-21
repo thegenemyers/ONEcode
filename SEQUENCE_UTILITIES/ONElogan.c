@@ -6,6 +6,15 @@
  * Description: ONEcode file format conversion for Logan contigs 
  *              (https://github.com/IndexThePlanet/Logan)
  *              Record sequences, abundances, graph links
+ *
+ * Example usage:
+ *   aws s3 cp s3://logan-pub/u/SRR13288205/SRR13288205.unitigs.fa.zst . --no-sign-request
+ *   zstd -d SRR13288205.unitigs.fa.zst
+ *   make ONElogan
+ *   \time ./ONElogan SRR13288205.unitigs.fa SRR13288205.unitigs.1logan 1
+ *
+ * Note: multithreading currently provides no speed-up
+ *
  * Created: August 15 2024
  *-------------------------------------------------------------------
  */
@@ -19,7 +28,7 @@
 
 #define MAX_LINE_LENGTH 1000000
 #define MAX_HEADER_LENGTH 1000
-#define CHUNK_SIZE 1000  // Number of sequences to process in each chunk
+#define CHUNK_SIZE 10000  // Number of sequences to process in each chunk
 
 void strip_newline(char *s) {
     char *p = strchr(s, '\n');
