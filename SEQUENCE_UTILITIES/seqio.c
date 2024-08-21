@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Aug 18 21:02 2024 (rd109)
+ * Last edited: Aug 18 21:15 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -490,6 +490,11 @@ void seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *q
   assert (si->isWrite) ;
 
   ++si->nSeq ;
+
+  { static char buf[24] ;
+    if (si->type != ONE && !id) { id = buf ; sprintf (buf, "%lld", si->nSeq) ; }
+  }
+
   si->idLen = id ? strlen(id) : 0 ;
   si->totIdLen += si->idLen ; if (si->idLen > si->maxIdLen) si->maxIdLen = si->idLen ;
   si->descLen = desc ? strlen(desc) : 0 ;
