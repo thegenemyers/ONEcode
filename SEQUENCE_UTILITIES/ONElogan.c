@@ -1,3 +1,15 @@
+/*  File: ONElogan.c
+ *  Authors: Rayan Chikhi (rayan.chikhi@pasteur.fr)
+ *           Richard Durbin (rd109@cam.ac.uk)
+ *  Copyright (C) Richard Durbin, Cambridge University, 2024
+ *-------------------------------------------------------------------
+ * Description: ONEcode file format conversion for Logan contigs 
+ *              (https://github.com/IndexThePlanet/Logan)
+ *              Record sequences, abundances, graph links
+ * Created: August 15 2024
+ *-------------------------------------------------------------------
+ */
+
 #include "ONElib.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,8 +90,6 @@ int main(int argc, char *argv[]) {
     OneSchema *schema = oneSchemaCreateFromText(
         "1 3 def 2 1\n"
         "P 3 seq\n"
-/*        "O S 2 6 STRING 3 DNA\n"
-        "D H 1 6 STRING\n"*/
         "S 5 logan\n"
         "O S 1 3 DNA\n"
         "D K 1 4 REAL\n"
