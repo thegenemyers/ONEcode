@@ -43,6 +43,9 @@ seqextract: seqextract.c seqio.o ONElib.o $(UTILS_OBJS)
 seqstat: seqstat.c seqio.o ONElib.o $(UTILS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
 
+ONElogan: ONElogan.c ONElib.o
+	$(CC) -fopenmp $(CFLAGS) $^ -o $@
+
 #TEST
 
 test: seqstat seqconvert seqextract

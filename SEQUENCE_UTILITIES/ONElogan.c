@@ -1,3 +1,24 @@
+/*  File: ONElogan.c
+ *  Authors: Rayan Chikhi (rayan.chikhi@pasteur.fr)
+ *           Richard Durbin (rd109@cam.ac.uk)
+ *  Copyright (C) Richard Durbin, Cambridge University, 2024
+ *-------------------------------------------------------------------
+ * Description: ONEcode file format conversion for Logan contigs 
+ *              (https://github.com/IndexThePlanet/Logan)
+ *              Record sequences, abundances, graph links
+ *
+ * Example usage:
+ *   aws s3 cp s3://logan-pub/u/SRR13288205/SRR13288205.unitigs.fa.zst . --no-sign-request
+ *   zstd -d SRR13288205.unitigs.fa.zst
+ *   make ONElogan
+ *   \time ./ONElogan SRR13288205.unitigs.fa SRR13288205.unitigs.1logan 1
+ *
+ * Note: multithreading currently provides no speed-up
+ *
+ * Created: August 15 2024
+ *-------------------------------------------------------------------
+ */
+
 #include "ONElib.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +28,7 @@
 
 #define MAX_LINE_LENGTH 1000000
 #define MAX_HEADER_LENGTH 1000
-#define CHUNK_SIZE 1000  // Number of sequences to process in each chunk
+#define CHUNK_SIZE 10000  // Number of sequences to process in each chunk
 
 void strip_newline(char *s) {
     char *p = strchr(s, '\n');
@@ -78,8 +99,6 @@ int main(int argc, char *argv[]) {
     OneSchema *schema = oneSchemaCreateFromText(
         "1 3 def 2 1\n"
         "P 3 seq\n"
-/*        "O S 2 6 STRING 3 DNA\n"
-        "D H 1 6 STRING\n"*/
         "S 5 logan\n"
         "O S 1 3 DNA\n"
         "D K 1 4 REAL\n"
