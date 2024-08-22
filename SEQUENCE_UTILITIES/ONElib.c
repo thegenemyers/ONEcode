@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Aug 11 19:05 2024 (rd109)
+ * Last edited: Aug 22 13:57 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/uio.h>
+#include <sys/stat.h>
 #include <math.h>
 
 #define DEBUG
@@ -214,8 +215,6 @@ static void schemaAddInfoFromLine (OneSchema *vs, OneFile *vf, char t, char type
 	     i, n, s, vf->line, t) ;
     }
 
-  if (oneReadComment (vf) && ((t >= 'A' && t <= 'Z') || (t >= 'a' && t <= 'z')))
-    vs->defnComment[vs->nDefn] = strdup (oneReadComment(vf)) ;
   schemaAddInfoFromArray (vs, n, a, t, type) ;  
 }
 
@@ -260,6 +259,7 @@ static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
     case 'O': // object type
     case 'D': // standard record type
       schemaAddInfoFromLine (vs, vf, oneChar(vf,0), vf->lineType) ;
+      if (oneReadComment (vf)) vs->defnComment[vs->nDefn-1] = strdup (oneReadComment(vf)) ;
       break ;
     default:
       die ("unrecognized schema line %d starting with %c", vf->line, vf->lineType) ;
@@ -655,31 +655,36 @@ static void provRefDefCleanup (OneFile *vf)
     }
 }
 
-static void oneFileDestroy (OneFile *vf)
-{ int       i, j;
+static void oneFileCleanupSlaves (OneFile *vf)
+{ int      i, j;
   OneInfo *li, *lx;
 
-  if (vf->share)
-    { for (i = 0; i < 128 ; i++)
-        { lx = vf->info[i];
-          if (lx != NULL)
-            { for (j = 1; j < vf->share; j++)
-                { li = vf[j].info[i];
-		  if (li != lx) // the index OneInfos are shared
-		    { if (li->listCodec == lx->listCodec) li->listCodec  = NULL;
-		      if (li->index == lx->index) li->index = NULL ;
-		      infoDestroy(li);
-		    }
+  for (i = 0; i < 128 ; i++)
+    { lx = vf->info[i];
+      if (lx != NULL)
+	{ for (j = 1; j < vf->share; j++)
+	    { li = vf[j].info[i];
+	      if (li != lx) // the index OneInfos are shared
+		{ if (li->listCodec == lx->listCodec) li->listCodec  = NULL;
+		  if (li->index == lx->index) li->index = NULL ;
+		  infoDestroy(li);
 		}
-            }
-        }
-
-      for (j = 1; j < vf->share; j++)
-        { provRefDefCleanup (&vf[j]) ;
-          if (vf[j].codecBuf   != NULL) free (vf[j].codecBuf);
-          if (vf[j].f          != NULL) fclose (vf[j].f);
-        }
+	    }
+	}
     }
+
+  for (j = 1; j < vf->share; j++)
+    { provRefDefCleanup (&vf[j]) ;
+      if (vf[j].codecBuf   != NULL) free (vf[j].codecBuf);
+      if (vf[j].f          != NULL) fclose (vf[j].f);
+    }
+}
+
+static void oneFileDestroy (OneFile *vf)
+{ int      i, j;
+
+  if (vf->share)
+    oneFileCleanupSlaves (vf) ;
 
   provRefDefCleanup (vf) ;
   if (vf->codecBuf != NULL) free (vf->codecBuf);
@@ -1249,6 +1254,68 @@ void *_oneCompressedList (OneFile *vf)
   return (void*) vf->codecBuf ;
 }
 
+OneFile *readThreadMake (OneFile *vfOld, OneSchema *vs0, FILE **files)
+{
+  int   i, j ;
+  int   nthreads = vfOld->share ;
+  off_t startOff ;
+
+  OneFile *vf = new0 (nthreads, OneFile) ;
+  vf[0] = *vfOld ;
+  free (vfOld) ; // NB free() not oneFileDestroy because don't want deep destroy
+
+  startOff = ftello (vf->f) ;
+  for (i = 1; i < nthreads; i++)
+    { OneSchema *vs = vs0 ; // needed because vs will have changed to map to the relevant page
+      OneFile   *v = oneFileCreate(&vs, vf->fileType); // need to do this after header is read
+      vf[i] = *v ;
+      free (v) ;
+      v = vf+i;
+      
+      v->share = -i ; // so this slave knows its own identity
+
+      v->f = files[i] ;
+      if (fseeko (v->f, startOff, SEEK_SET) != 0)
+	die ("ONE file error: can't seek to start of data in thread file");
+      
+      for (j = 0; j < 128; j++)
+	{ OneInfo *li = v->info[j];
+	  if (li != NULL)
+	    { OneInfo *l0 = vf->info[j];
+	      li->given = l0->given; // copy the given data
+	      li->accum = l0->accum; // copy the accum data (needed for reopen)
+	      if (li->listCodec) vcDestroy (li->listCodec) ; // share the codec
+	      li->listCodec  = l0->listCodec;
+	      if (li->listEltSize > 0) // need a private buffer
+		{ li->bufSize = l0->bufSize;
+		  if (li->buffer) free (li->buffer) ;
+		  li->buffer  = new (l0->bufSize*l0->listEltSize, void);
+		}
+	      if (l0->isObject) li->isObject = true ;
+	      if (l0->index) // share the index
+		{ if (li->index) free(li->index) ;
+		  li->index = l0->index ;
+		}
+	      if (l0->stats) // copy the group data
+		{ OneStat *s0 = l0->stats, *s = li->stats ;
+		  for ( ; s0->type ; ++s0, ++s) *s = *s0 ;
+		}
+	    }
+	}
+
+      v->codecBufSize = vf->codecBufSize;
+      if (v->codecBuf) free (v->codecBuf) ;
+      v->codecBuf = new (v->codecBufSize, void); // need a private codec buffer
+
+      if (vf->subType != NULL)
+	v->subType = strdup (vf->subType) ;
+      else
+	v->subType = NULL;
+    }
+
+  return vf ;
+}
+
 /***********************************************************************************
  *
  *   ONE_FILE_OPEN_READ:
@@ -1401,6 +1468,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
 	    else
 	      { int oldMax = vf->nFieldMax ;
 		schemaAddInfoFromLine (vsFile, vf, t, oneChar(vf,0)) ;
+		if (oneReadComment (vf)) vf->defnComment[vf->nDefn] = strdup (oneReadComment (vf)) ;
 		OneInfo *vi = vsFile->info[(int)t] ;
 		vf->info[(int)t] = infoDeepCopy (vi) ;
 		vf->defnOrder[vf->nDefn++] = t ; // definition order
@@ -1556,73 +1624,58 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
   // if parallel, allocate a OneFile array for parallel thread objects, switch vf to head of array
 
   if (nthreads > 1) // should we allow multiple threads for a bare file, which has no index?
-    { int i, j ;
+    { int i ;
+      FILE **files = new (nthreads, FILE*) ;
 
       if (strcmp (path, "-") == 0)
-        die ("ONE error: parallel input incompatible with stdin as input");
+	die ("ONE error: parallel input incompatible with stdin as input");
 
-      { OneFile *vf0 = vf ;
-	vf = new (nthreads, OneFile);
-	vf[0] = *vf0 ;
-	vf->share = nthreads ;
-	free (vf0) ; // NB free() not oneFileDestroy because don't want deep destroy
-      }
-
-      startOff = ftello (vf->f) ;
-      for (i = 1; i < nthreads; i++)
-	{ OneSchema *vs = vs0 ; // needed because vs will have changed to map to the relevant page
-	  OneFile   *v = oneFileCreate(&vs, vf->fileType); // need to do this after header is read
-	  vf[i] = *v ;
-	  free (v) ;
-	  v = vf+i;
-      
-	  v->share = -i ; // so this slave knows its own identity
-
-	  v->f = fopen (path, "r") ; // need an independent file handle
-	  if (fseeko (v->f, startOff, SEEK_SET) != 0)
-	    die ("ONE file error: can't seek to start of data");
-      
-	  for (j = 0; j < 128; j++)
-	    { OneInfo *li = v->info[j];
-	      if (li != NULL)
-		{ OneInfo *l0 = vf->info[j];
-		  li->given = l0->given; // copy the given data
-		  if (li->listCodec) vcDestroy (li->listCodec) ; // share the codec
-		  li->listCodec  = l0->listCodec;
-		  if (li->listEltSize > 0) // need a private buffer
-		    { li->bufSize = l0->bufSize;
-		      if (li->buffer) free (li->buffer) ;
-		      li->buffer  = new (l0->bufSize*l0->listEltSize, void);
-		    }
-		  if (l0->isObject) li->isObject = true ;
-		  if (l0->index) // share the index
-		    { if (li->index) free(li->index) ;
-		      li->index = l0->index ;
-		    }
-		  if (l0->stats) // copy the group data
-		    { OneStat *s0 = l0->stats, *s = li->stats ;
-		      for ( ; s0->type ; ++s0, ++s) *s = *s0 ;
-		    }
-		}
-	    }
-
-	  v->codecBufSize = vf->codecBufSize;
-	  if (v->codecBuf) free (v->codecBuf) ;
-	  v->codecBuf = new (v->codecBufSize, void); // need a private codec buffer
-
-          if (vf->subType != NULL)
-            { v->subType = new (strlen(vf->subType)+1, char);
-	      strcpy (v->subType, vf->subType) ;
-            }
-          else
-            v->subType = NULL;
-	}
-    } // end of parallel threads block
+      for (i = 1 ; i < nthreads ; ++i) files[i] = fopen (path, "r") ;
+      vf = readThreadMake (vf, vs0, files) ;
+      free (files) ;
+    }
 
   if (!isBareFile)
     oneSchemaDestroy (vs0) ;
     
   return vf;
+}
+
+static void oneFinalize (OneFile *vf) ; // forward declaration
+
+static OneSchema *oneSchema (OneFile *vf)
+{
+  OneSchema *vs = oneSchemaCreateDynamic (vf->fileType, vf->subType) ;
+  vs->nFieldMax = vf->nFieldMax ;
+  int i ;
+  for (i = 0 ; i < vf->nDefn ; ++i)
+    { int t = vf->defnOrder[i] ;
+      if (t & 0x80) // a group
+	schemaAddGroup (vs, t & 0x7f) ;
+      else
+	vs->info[t] = infoDeepCopy (vf->info[t]) ;
+      if (vf->defnComment[i]) vs->defnComment[i] = strdup (vf->defnComment[i]) ;
+      vs->defnOrder[vs->nDefn++] = t ;
+    }
+    
+  return vs ;
+}
+
+OneFile *oneFileReopenRead (OneFile *vf)
+{
+  if (!vf || !vf->isWrite) return 0 ;
+  oneFinalize (vf) ;    // merges in data from any slaves, completes indices etc.
+  oneFileCleanupSlaves (vf) ;
+  vf->isFinal = false ; // so we can now read it again
+  vf->isWrite = false ; // now it will be readonly
+  oneGoto (vf, 0, 0) ; // go to start of data
+  if (vf->share == 1)
+    return vf ;
+  else
+    { OneSchema *vs0 = oneSchema (vf) ; // need this because of how oneFileCreate() works
+      return readThreadMake (vf, vs0, vf->tempReadFiles) ; // use the cached file handles
+      oneSchemaDestroy (vs0) ;
+    }
 }
 
 /***********************************************************************************
@@ -1715,20 +1768,41 @@ static inline void allocateIndices (OneFile *vf, int i, I64 size)
 OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileType,
                               bool isBinary, int nthreads)
 { OneFile   *vf ;
-  FILE      *f ;
+  FILE      *f, **tempReadFiles = 0 ;
   OneSchema *vs0 = vs ; // needed here because call to oneFileCreate changes vs
+  char      *tempPath, *template ; // used for temporary files (thread files and if path is a dir)
 
+  tempPath = new(strlen(path)+12, char) ;
+  strcpy (tempPath, path) ;
+  template = tempPath + strlen(tempPath) ;
+	  
   if (strcmp (path, "-") == 0)
     f = stdout;
   else
-    { f = fopen (path, "w");
-      if (f == NULL)
-        return NULL ;
+    { struct stat status ;
+      if (stat (path, &status) >= 0 && (status.st_mode & S_IFMT) == S_IFDIR) // a directory
+	{ *template++ = '/' ;
+	  strcpy (template, "oneXXXXXX") ;
+	  int fd = mkstemp (tempPath) ;
+	  if (fd == -1) return NULL ;
+	  f = fdopen (fd, "w+") ;
+	  if (nthreads > 1)
+	    { tempReadFiles = new (nthreads, FILE*) ;
+	      int i ;
+	      for (i = 1 ; i < nthreads ; ++i)
+		tempReadFiles[i] = fopen (tempPath, "r") ;
+	    }
+	  if (unlink(tempPath) < 0)
+	    die ("ONEfile error: failed to unlink temporary file %s for parallel write", tempPath) ;
+	}
+      else
+	{ f = fopen (path, "w");
+	  if (f == NULL) return NULL ;
+	}
     }
 
   vf = oneFileCreate (&vs, fileType) ;
-  if (!vf)
-    return NULL ;
+  if (!vf) return NULL ;
 
   initialiseStats (vf) ;
   
@@ -1748,9 +1822,9 @@ OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileT
     { OneFile *v, *vf0 = vf ;
       int      i ;
       char     name[100] ;
-      int      pid = getpid() ;
 
       vf->share = nthreads ;
+      if (tempReadFiles) vf->tempReadFiles = tempReadFiles ;
       vf->fieldLock = mutexInit;
       vf->listLock  = mutexInit;
       vf = new (nthreads, OneFile);
@@ -1774,14 +1848,18 @@ OneFile *oneFileOpenWriteNew (const char *path, OneSchema *vs, const char *fileT
 
           v->share = -i; // this is the key mark for the i'th slave
 
-          sprintf(name,".part.%d.%d",pid,i);
-          f = fopen (name, "w");
+	  strcpy (template, "oneXXXXXX") ;
+	  int fd = mkstemp (tempPath) ;
+	  if (fd == -1) return NULL ;
+	  f = fdopen (fd, "w+") ;
           if (f == NULL)
-            die ("ONE file error: cannot create temporary file %d for parallel write", i);
-	  v->f = f;
+            die ("ONEfile error: cannot create temporary file %s for parallel write", name) ;
+	  if (unlink(tempPath) < 0)
+	    die ("ONEfile error: failed to unlink temporary file %s for parallel write", name) ;
+	  v->f = f ;
 
-	  vf[i] = *v;
-	  free (v);
+	  vf[i] = *v ;
+	  free (v) ;
 	}
     }
 
@@ -2613,47 +2691,44 @@ void oneFinalizeCounts(OneFile *vf)
     }
 }
 
-// automatically rewrites header if allowed when writing
+//
+
+static void oneFinalize (OneFile *vf)
+{
+  if (!vf->isFinal)
+    oneFinalizeCounts (vf);
+
+  if (!vf->isHeaderOut && (vf->isBinary || !vf->isNoAsciiHeader)) writeHeader (vf) ;
+      
+  if (vf->share > 0)
+    { int  i, nread ;
+      char *buf;
+      buf = new (10000000, char);
+      for (i = 1; i < vf->share; i++)
+	{ if (!fseek (vf[i].f, 0L, SEEK_SET))
+	    die ("ONEfile error: failed to rewind parallel file %d", i) ;
+	  while (!feof(vf[i].f) && (nread = fread (buf,1,10000000,vf[i].f)) > 0)
+	    if ((int) fwrite(buf,1,nread,vf->f) != nread)
+	      die ("ONE write error: while cat'ing thread bits (oneFileClose)");
+	}
+      free(buf);
+    }
+
+  if (vf->isBinary || vf->line)
+    fputc ('\n', vf->f) ; // terminate last line - end of data marker if binary
+  if (vf->isBinary) // write the footer
+    { if (!vf->isLastLineBinary)
+	fputc ('\n', vf->f);  // need an extra '\n' to ensure end of data marker
+      oneWriteFooter (vf);
+    }
+}
 
 void oneFileClose (OneFile *vf)
 {
   assert (vf->share >= 0) ;
 
   if (vf->isWrite)
-    {
-      if (!vf->isFinal) // RD moved this here from above - surely only needed if isWrite
-	oneFinalizeCounts (vf);
-
-      if (!vf->isHeaderOut && (vf->isBinary || !vf->isNoAsciiHeader)) writeHeader (vf) ;
-      
-      if (vf->share > 0)
-        { int  i, pid, fid, nread;
-          char name[100], *buf;
-
-          buf = new (10000000, char);
-          pid = getpid();
-          for (i = 1; i < vf->share; i++)
-            { fclose (vf[i].f);
-              vf[i].f = NULL;
-              sprintf(name,".part.%d.%d",pid,i);
-              fid = open(name,O_RDONLY);
-              while ((nread = read(fid,buf,10000000)) > 0)
-                if ((int) fwrite(buf,1,nread,vf->f) != nread)
-                  die ("ONE write error: while cat'ing thread bits (oneFileClose)");
-              if (unlink(name) < 0)
-                die ("ONE write error: could not delete thread file %s", name);
-            }
-          free(buf);
-        }
-
-      if (vf->isBinary || vf->line)
-	fputc ('\n', vf->f) ; // terminate last line - end of data marker if binary
-      if (vf->isBinary) // write the footer
-        { if (!vf->isLastLineBinary)
-	    fputc ('\n', vf->f);  // need an extra '\n' to ensure end of data marker
-	  oneWriteFooter (vf);
-	}
-    }
+    oneFinalize (vf) ;
   
   oneFileDestroy (vf);
 }
