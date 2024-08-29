@@ -5,7 +5,7 @@
  * Description: includes standard system headers and own headers
  * Exported functions:
  * HISTORY:
- * Last edited: May 29 12:26 2023 (rd109)
+ * Last edited: Aug 29 15:40 2024 (rd109)
  * Created: Wed Jan  5 16:13:48 2011 (rd)
  *-------------------------------------------------------------------
  */
@@ -27,7 +27,7 @@ typedef int16_t I16 ;
 const static I16 I16MAX = 0x7fff ;
 typedef int32_t I32 ;
 const static I32 I32MAX = 0x7fffffff ;
-typedef int64_t I64 ;
+typedef long long I64 ;
 const static I64 I64MAX = 0x7fffffffffffffff ;
 
 typedef uint8_t U8 ;
@@ -36,7 +36,7 @@ typedef uint16_t U16 ;
 const static U16 U16MAX = 0xffff ;
 typedef uint32_t U32 ;
 const static U32 U32MAX = 0xffffffff ;
-typedef uint64_t U64 ;
+typedef unsigned long long U64 ;
 const static U64 U64MAX = 0xffffffffffffffff ;
 #endif
 
