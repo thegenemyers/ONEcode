@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Aug 22 12:33 2024 (rd109)
+ * Last edited: Aug 31 14:48 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -394,6 +394,11 @@ void oneUserBuffer (OneFile *of, char lineType, void *buffer);
   //   to revert to a default system buffer if 'buffer' = NULL.  The previous buffer
   //   (if any) is freed.  The user must ensure that a buffer they supply is large
   //   enough. BTW, this buffer is overwritten with each new line read of the given type.
+
+#define oneObject(of,i)  ((of) && (of)->info[i] ? (of)->info[i]->accum.count : -1)
+
+  // Returns the number of the object of type lineType currently in.  Works in read
+  // or write mode.  0 if no objects of this type read/written yet. -1 if lineType illegal.
 
 bool oneGoto (OneFile *of, char lineType, I64 i);
 
