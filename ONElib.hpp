@@ -5,6 +5,7 @@
  *
  *  Authors: Richard Durbin (rd109@cam.ac.uk), Gene Myers (gene.myers@gmail.com)
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
+ *  with considerable help from Regev Schweiger
  *
  *****************************************************************************************/
 /*  Last edited: Jun  9 11:07 2023 (rd109) */
@@ -84,9 +85,9 @@ class ONEfile
   void      setReal(int x, double val) { vf->field[x].r = val ; }
   char      getChar(int x) { return vf->field[x].c ; }
   void      setChar(int x, char val) { vf->field[x].c = val ; }
-  char*     setDNAchar() { return (char*) _oneList(vf) ; }
   int64_t*  getIntList() { return (int64_t*) C_1F::_oneList(vf) ; }
   double*   getRealList() { return (double*) C_1F::_oneList(vf) ; }
+  char*     getDNAchar() { return (char*) _oneList(vf) ; }
   uint8_t*  getDNA2bit () { return (uint8_t*) C_1F::_oneCompressedList(vf) ; }
   string    getString() { return (char *) C_1F::_oneList(vf) ; }
   char*     nextString(char* s) { return s + strlen(s) + 1 ; }
@@ -99,9 +100,12 @@ class ONEfile
 
   char      lineType() { return vf->lineType ; }
   int64_t   lineNumber() { return vf->line ; }
-  int64_t   count(char lineType) { return vf->info[lineType]->given.count ; }
-  int64_t   max(char lineType) { return vf->info[lineType]->given.max ; }
-  int64_t   total(char lineType) { return vf->info[lineType]->given.total ; }
+  int64_t   givenCount(char lineType) { return vf->info[lineType]->given.count ; }
+  int64_t   givenMax(char lineType) { return vf->info[lineType]->given.max ; }
+  int64_t   givenTotal(char lineType) { return vf->info[lineType]->given.total ; }
+  int64_t   currentCount(char lineType) { return vf->info[lineType]->accum.count ; }
+  int64_t   currentMax(char lineType) { return vf->info[lineType]->accum.max ; }
+  int64_t   currentTotal(char lineType) { return vf->info[lineType]->accum.total ; }
 } ;
 
 #ifdef TEST_HEADER
@@ -126,7 +130,7 @@ int main (int argc, char *argv[])
   ONEschema os(schemaText) ;
   ONEfile of(argv[1], "r", os, "", 1) ;
 
-  cout << "opened 1seq file " << string(argv[1]) << " with " << of.count('S') << " sequences\n" ;
+  cout << "opened 1seq file " << string(argv[1]) << " with " << of.givenCount('S') << " sequences\n" ;
   
   while (of.readLine())
     if (of.lineType() == 'S')
