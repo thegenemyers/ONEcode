@@ -122,6 +122,15 @@ class ONEfile
   
   void      writeComment (string s) { C_1F::oneWriteComment(of, (char*)"%s", s.c_str()) ; }
 
+  // provenance etc.
+
+  bool addProvenance(string prog, string version, string commandLine)
+  { return C_1F::oneAddProvenance(of, prog.c_str(), version.c_str(),
+				  (char*)"%s", commandLine.c_str()); }
+  bool inheritProvenance (ONEfile source) { return C_1F::oneInheritProvenance (of, source.of) ; }
+  bool addReference(string filename, int64_t count)
+  { return C_1F::oneAddReference(of, filename.c_str(), count) ; }
+  bool inheritReference(ONEfile source) { return C_1F::oneInheritReference (of, source.of) ; }
 
   // some extra functions to hide readable class attributes
 
