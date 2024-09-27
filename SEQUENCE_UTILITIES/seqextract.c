@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 28 00:06 2024 (rd109)
+ * Last edited: Sep 28 00:51 2024 (rd109)
  * Created: Thu Dec  7 22:26:05 2023 (rd109)
  *-------------------------------------------------------------------
  */
@@ -182,7 +182,7 @@ int main (int argc, char *argv[])
   else
     isWriteIdentifiers = true ;
   U64 count = 0, kt = 0, kc = 0 ;
-  char *s ; U64 k ;
+  U64 k ;
   while (seqIOread (siIn))
     { ++count ;
       while (kc < arrayMax (countFrags) && arrp(countFrags,kc,Frag)->k == count)

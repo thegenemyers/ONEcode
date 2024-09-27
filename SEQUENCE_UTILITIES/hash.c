@@ -20,7 +20,7 @@
  * -------------------------------------------------------------------
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 27 23:22 2024 (rd109)
+ * Last edited: Sep 28 00:55 2024 (rd109)
  * Created: Fri Jan  7 09:20:25 2011 (rd)
  *-------------------------------------------------------------------
  */
@@ -196,7 +196,6 @@ bool hashAdd (Hash hx, HashKey k, int *index)
 {
   TrueHash *h = (TrueHash*) hx ;
   I64 hash, delta = 0 ;
-  int test ;
 
   if (!h->guard)
     hashDouble (h) ;

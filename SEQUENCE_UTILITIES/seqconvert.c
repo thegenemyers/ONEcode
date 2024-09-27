@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 27 23:38 2024 (rd109)
+ * Last edited: Sep 28 00:53 2024 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -297,7 +297,7 @@ static void scaffoldBreak (SeqIO *siOut, char *id, char *desc, U64 seqLen, char 
 			   int scaffThresh)
 {
   OneFile *vf = (OneFile*) siOut->handle ;
-  I64      i, j, firstN1 = 0 ; // firstN1 is 0 if not in a run of Ns, 1 + start of run if in a run of Ns
+  I64      i, firstN1 = 0 ; // firstN1 is 0 if not in a run of Ns, 1 + start of run if in a run of Ns
   bool     isOne = (siOut->type == ONE) ;
   int      k = 0 ;             // number of contig in scaffold
 
@@ -316,7 +316,7 @@ static void scaffoldBreak (SeqIO *siOut, char *id, char *desc, U64 seqLen, char 
     }
   
   for (i = 0 ; i < seqLen ; ++i)
-    if (firstN1 && acgtCheck[seq[i]]) // end of a block of non-acgt chars
+    if (firstN1 && acgtCheck[(int)seq[i]]) // end of a block of non-acgt chars
       { --firstN1 ; 
 	if (firstN1 == 0 || i - firstN1 >= scaffThresh)
 	  { if (firstN1) // write a sequence up until firstN1
@@ -334,7 +334,7 @@ static void scaffoldBreak (SeqIO *siOut, char *id, char *desc, U64 seqLen, char 
 	  }
 	firstN1 = 0 ;
       }
-    else if (!firstN1 && !acgtCheck[seq[i]]) // start of a block of non-acgt chars
+    else if (!firstN1 && !acgtCheck[(int)seq[i]]) // start of a block of non-acgt chars
       firstN1 = i+1 ; // set the marker; +1 so that it is set if i == 0
 
   // now have finished checking sequence
@@ -363,7 +363,6 @@ static void scaffoldJoin (char *inFileName, SeqIO *siOut, bool isVerbose)
       fprintf (stderr, " containing %lld sequences", vfIn->info['S']->given.count) ;
       fprintf (stderr, " with total length %lld\n", vfIn->info['S']->given.total) ;
     }
-  OneFile *vfOut = (OneFile*) siOut->handle ;
 
   Buffer *seqBuf = bufferCreate (1 << 20) ;
   Buffer *idBuf  = bufferCreate (64) ;

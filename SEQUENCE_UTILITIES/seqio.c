@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 27 23:34 2024 (rd109)
+ * Last edited: Sep 28 00:55 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -507,7 +507,6 @@ void seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *q
     { OneFile *vf = (OneFile*)(si->handle) ;
       static U64 bufLen = 0 ;
       static char *buf = 0 ;
-      static char idBuf[16] ;
       I64 i ;
       if (seqLen > bufLen)
 	{ if (buf) free (buf) ;
@@ -528,7 +527,7 @@ void seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *q
 	  oneWriteLine (vf, 'Q', seqLen, buf) ;
 	}
       for (i = 0 ; i < seqLen ; ++i) // write exceptions for non-ACGT characters
-	if (!acgtCheck[seq[i]])
+	if (!acgtCheck[(int)seq[i]])
 	  { oneInt(vf,0) = i ;
 	    char c = oneChar(vf,1) = seq[i] ;
 	    I64 n = 1 ;

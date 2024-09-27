@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 27 23:36 2024 (rd109)
+ * Last edited: Sep 28 00:51 2024 (rd109)
  * * May 19 09:12 2024 (rd109): renamed composition to seqstat, for consistency
  * Created: Sun Nov 11 17:21:40 2018 (rd109)
  *-------------------------------------------------------------------
@@ -56,11 +56,11 @@ int main (int argc, char *argv[])
   SeqIO *si = seqIOopenRead (*argv, 0, true) ;
   if (!si) die ("failed to open sequence file %s\n", *argv) ;
 
-  U64 lenMin = 0, lenMax = 0, totLen = 0, n = 0 ;
+  U64 lenMin = 0, lenMax = 0, totLen = 0 ;
   int i ;
   while (seqIOread (si))
     { char *s = sqioSeq(si), *e = s + si->seqLen ;
-      if (totBase) while (s < e) ++totBase[*s++] ;
+      if (totBase) while (s < e) ++totBase[(int)*s++] ;
       totLen += si->seqLen ;
       if (si->seqLen > lenMax) lenMax = si->seqLen ;
       if (!lenMin || si->seqLen < lenMin) lenMin = si->seqLen ;
@@ -70,7 +70,7 @@ int main (int argc, char *argv[])
 	}
       if (totQual && si->isQual)
 	{ char *q = sqioQual(si), *e = q + si->seqLen ;
-	  while (q < e) ++totQual[*q++] ;
+	  while (q < e) ++totQual[(int)*q++] ;
 	}
     }
   printf ("%s file, %llu sequences >= 0, %llu total, %.2f average, %llu min, %llu max\n",
