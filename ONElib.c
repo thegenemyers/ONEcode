@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Sep  2 20:18 2024 (rd109)
+ * Last edited: Sep 28 00:28 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -1006,8 +1006,12 @@ static inline void readCompressedFields (FILE *f, OneField *field, OneInfo *li)
   for (i = 0 ; i < li->nField ; ++i)
     switch (li->fieldType[i])
       {
-      case oneREAL: fread (&field[i].r, 8, 1, f) ; break ;
-      case oneCHAR: field[i].c = fgetc (f) ; break ;
+      case oneREAL:
+	if (fread (&field[i].r, 8, 1, f) != 8) die ("failed to read a REAL") ;
+	break ;
+      case oneCHAR:
+	field[i].c = fgetc (f) ;
+	break ;
       default: // includes INT and all the LISTs, which store their length in field as an INT
 	field[i].i = ltfRead (f) ;
       }
@@ -2030,14 +2034,16 @@ bool addProvenance(OneFile *vf, OneProvenance *from, int n)
 bool oneInheritProvenance(OneFile *vf, OneFile *source)
 { return (addProvenance(vf, source->provenance, source->info['!']->accum.count)); }
 
-bool oneAddProvenance(OneFile *vf, char *prog, char *version, char *format, ...)
+bool oneAddProvenance(OneFile *vf, const char *prog, const char *version, char *format, ...)
 { va_list args ;
   OneProvenance p;
   time_t t = time(NULL);
 
-  p.program = prog;
-  p.version = version;
-  va_start (args, format) ; vasprintf (&p.command, format, args) ; va_end (args) ;
+  p.program = (char*) prog; // cast to keep compiler happy - this is safe!
+  p.version = (char*) version; // cast to keep compiler happy - this is safe!
+  va_start (args, format) ;
+  (void) vasprintf (&p.command, format, args) ;
+  va_end (args) ;
   p.date = new (20, char);
   strftime(p.date, 20, "%F_%T", localtime(&t));
   addProvenance (vf, &p, 1);
@@ -2084,9 +2090,9 @@ static bool addReference(OneFile *vf, OneReference *from, int n, bool isDeferred
 bool oneInheritReference(OneFile *vf, OneFile *source)
 { return (addReference(vf, source->reference, source->info['<']->accum.count, false)); }
 
-bool oneAddReference(OneFile *vf, char *filename, I64 count)
+bool oneAddReference(OneFile *vf, const char *filename, I64 count)
 { OneReference ref;
-  ref.filename = filename;
+  ref.filename = (char*) filename; // cast to keep compiler happy - this is safe!
   ref.count    = count;
   return (addReference(vf, &ref, 1, false));
 }
@@ -2094,10 +2100,22 @@ bool oneAddReference(OneFile *vf, char *filename, I64 count)
 bool oneInheritDeferred (OneFile *vf, OneFile *source)
 { return (addReference (vf, source->deferred, source->info['>']->accum.count, true)); }
 
-bool oneAddDeferred (OneFile *vf, char *filename)
+bool oneAddDeferred (OneFile *vf, const char *filename)
 { OneReference ref;
-  ref.filename = filename;
+  ref.filename = (char *) filename; // cast to keep compiler happy - this is safe!
   return (addReference (vf, &ref, 1, true));
+}
+
+bool oneStats (OneFile *of, char lineType, I64 *count, I64 *max, I64 *total)
+{
+  OneInfo    *info = of->info[(int)lineType] ;
+  if (!info)  return false ;
+  
+  OneCounts   counts = of->isWrite ? info->accum : info->given ;
+  if (count) *count = counts.count ;
+  if (max)   *max = counts.max ;
+  if (total) *total = counts.total ;
+  return true ;
 }
 
 /***********************************************************************************
@@ -2511,10 +2529,10 @@ void oneWriteLineDNA2bit (OneFile *vf, char lineType, I64 len, U8 *dnaBuf) // NB
 void oneWriteComment (OneFile *vf, char *format, ...)
 {
   char *comment ;
+  
   va_list args ;
-
   va_start (args, format) ; 
-  vasprintf (&comment, format, args) ; 
+  (void) vasprintf (&comment, format, args) ;
   va_end (args) ;
 
   if (vf->isCheckString) // then check no newlines in format
@@ -4156,4 +4174,3 @@ static void *mydup(size_t n, void *x, size_t size)
 }
 
 /********************* end of file ***********************/
-
