@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: Aug 14 12:00 2024 (rd109)
+ * Last edited: Sep 27 23:38 2024 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -119,7 +119,7 @@ int main (int argc, char *argv[])
   if (isVerbose)
     { fprintf (stderr, "reading from file type %s", seqIOtypeName[siIn->type]) ;
       if (siIn->type == BINARY || siIn->type == ONE)
-	fprintf (stderr, "  with %" PRIu64 " sequences totLen %" PRIu64 "", siIn->nSeq, siIn->totSeqLen) ;
+	fprintf (stderr, "  with %llu sequences totLen %llu", siIn->nSeq, siIn->totSeqLen) ;
       fprintf (stderr, "\n") ;
     }
 
@@ -148,7 +148,7 @@ int main (int argc, char *argv[])
       }
 
   if (isVerbose)
-    { fprintf (stderr, "written %" PRIu64 " sequences to file type %s, total length %" PRIu64 ", max length %" PRIu64 "\n",
+    { fprintf (stderr, "written %llu sequences to file type %s, total length %llu, max length %llu\n",
 	       siOut->nSeq, seqIOtypeName[siOut->type], siOut->totSeqLen, siOut->maxSeqLen) ;
     }
 
@@ -306,7 +306,7 @@ static void scaffoldBreak (SeqIO *siOut, char *id, char *desc, U64 seqLen, char 
   static Buffer *idBuf = 0 ;
   if (!idBuf) idBuf = bufferCreate (64) ; // NB never destroyed - small one-time memory leak
   if (id) { bufferCheckSize (idBuf, strlen(id) + 12) ; strcpy (idBuf->buf, id) ; }
-  else sprintf (idBuf->buf, "s%" PRId64, siOut->nSeq+1) ;
+  else sprintf (idBuf->buf, "s%lld", siOut->nSeq+1) ;
   char *idTail = idBuf->buf + strlen(idBuf->buf) ;
   
   if (isOne)
@@ -359,9 +359,9 @@ static void scaffoldJoin (char *inFileName, SeqIO *siOut, bool isVerbose)
   if (!vfIn) die ("failed to open OneFile %s to read", inFileName) ;
   if (isVerbose)
     { fprintf (stderr, "reading from file type onecode") ;
-      fprintf (stderr, " with %" PRId64 " scaffolds",  vfIn->info['s']->given.count) ;
-      fprintf (stderr, " containing %" PRId64 " sequences", vfIn->info['S']->given.count) ;
-      fprintf (stderr, " with total length %" PRId64 "\n", vfIn->info['S']->given.total) ;
+      fprintf (stderr, " with %lld scaffolds",  vfIn->info['s']->given.count) ;
+      fprintf (stderr, " containing %lld sequences", vfIn->info['S']->given.count) ;
+      fprintf (stderr, " with total length %lld\n", vfIn->info['S']->given.total) ;
     }
   OneFile *vfOut = (OneFile*) siOut->handle ;
 

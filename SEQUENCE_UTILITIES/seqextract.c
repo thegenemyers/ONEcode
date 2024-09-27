@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: May 20 00:37 2024 (rd109)
+ * Last edited: Sep 28 00:06 2024 (rd109)
  * Created: Thu Dec  7 22:26:05 2023 (rd109)
  *-------------------------------------------------------------------
  */
@@ -72,7 +72,7 @@ void parse (char *s, U64 *len, U64 *start, U64 *end, bool *isRC)
   *end = strtoll(s, &s, 10) ;
   if (*s == 'R' && !*++s) { *isRC = true ; return ; }
   if (*s) die ("bad end in %s", text) ;
-  if (*end && *start > *end) die ("start %" PRIu64 " > end %" PRIu64 " in %s", *start, *end, text) ;
+  if (*end && *start > *end) die ("start %llu > end %llu in %s", *start, *end, text) ;
 }
 
 void parseText (char *s, Frag *f)
@@ -101,7 +101,7 @@ void parseFile (char *fileName, Array frags, bool isCount)
       if (isCount) parseCount (s, arrayp(frags, arrayMax(frags), Frag)) ;
       else parseText (s, arrayp (frags, arrayMax(frags), Frag)) ;
       ++line ;
-      if (getc(f) != '\n' && !feof(f)) die ("bad end of line %" PRIu64 " in file %s", line, fileName) ;
+      if (getc(f) != '\n' && !feof(f)) die ("bad end of line %llu in file %s", line, fileName) ;
     }
   fclose (f) ;
 }
@@ -118,10 +118,10 @@ void writeFrag (SeqIO *siIn, SeqIO *siOut, Frag *f, U64 count)
   seq += f->start ;
   if (count)
     { if (siIn->idLen)
-	{ if (snprintf (idBuf, 1024, "%s:%" PRIu64 "-%" PRIu64, sqioId(siIn), f->start,f->end) >= 1023)
+	{ if (snprintf (idBuf, 1024, "%s:%llu-%llu", sqioId(siIn), f->start,f->end) >= 1023)
 	    die ("buffer overflow in writeFrag - please use smaller identifiers or recompile with bigger buffer") ;
 	}
-      else sprintf (idBuf, "%" PRIu64 ":%" PRIu64 "-%" PRIu64, count, f->start, f->end) ;
+      else sprintf (idBuf, "%llu:%llu-%llu", count, f->start, f->end) ;
       if (f->isRC) strcat (idBuf, "R") ;
       seqIOwrite (siOut, idBuf, 0, f->end - f->start, seq, 0) ;
     }

@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Aug 18 21:15 2024 (rd109)
+ * Last edited: Sep 27 23:34 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -210,7 +210,7 @@ static void bufDouble (SeqIO *si)
 #define bufAdvanceInRecord(si) \
   { bufAdvanceEndRecord(si) ; \
     if (!si->nb) \
-      { fprintf (stderr, "incomplete sequence record line %" PRIu64 "\n", si->line) ; return false ; } \
+      { fprintf (stderr, "incomplete sequence record line %llu\n", si->line) ; return false ; } \
   } 
 
 static void bufHardRefill (SeqIO *si, U64 n) /* like bufRefill() but for bufConfirmNbytes() */
@@ -219,7 +219,7 @@ static void bufHardRefill (SeqIO *si, U64 n) /* like bufRefill() but for bufConf
   memmove (si->buf, si->buf + si->recStart, si->b - si->buf) ;
   si->recStart = 0 ; si->b = si->buf ;
   si->nb += gzread (si->gzf, si->b + si->nb, si->bufSize - si->nb) ;
-  if (si->nb < n) die ("incomplete sequence record %" PRIu64 "", si->line) ;
+  if (si->nb < n) die ("incomplete sequence record %llu", si->line) ;
 }
 
 #define bufConfirmNbytes(si, n) { if (si->nb < n) bufHardRefill (si, n) ; }
@@ -305,9 +305,9 @@ bool seqIOread (SeqIO *si)
   /* if get to here then this is a text file, FASTA or FASTQ */
   
   if (si->type == FASTA)
-    { if (*si->b != '>') die ("no initial > for FASTA record line %" PRIu64 "", si->line) ; }
+    { if (*si->b != '>') die ("no initial > for FASTA record line %llu", si->line) ; }
   else if (si->type == FASTQ)
-    { if (*si->b != '@') die ("no initial @ for FASTQ record line %" PRIu64 "", si->line) ; }
+    { if (*si->b != '@') die ("no initial @ for FASTQ record line %llu", si->line) ; }
   bufAdvanceInRecord(si) ; si->idStart = si->b - si->buf ;
   while (!isspace(*si->b)) bufAdvanceInRecord(si) ;
   si->idLen = si->b - sqioId(si) ;
@@ -338,13 +338,13 @@ bool seqIOread (SeqIO *si)
 	  while (s < si->b) { *s = si->convert[(int)*s] ; ++s ; }
 	}
       ++si->line ; bufAdvanceInRecord(si) ; 	      /* line 3 */
-      if (*si->b != '+') die ("missing + FASTQ line %" PRIu64 "", si->line) ;
+      if (*si->b != '+') die ("missing + FASTQ line %llu", si->line) ;
       while (*si->b != '\n') bufAdvanceInRecord(si) ; /* ignore remainder of + line */
       ++si->line ; bufAdvanceInRecord(si) ;	      /* line 4 */
       si->qualStart = si->b - si->buf ;
       while (*si->b != '\n') bufAdvanceInRecord(si) ;
       if (si->b - si->buf - si->qualStart != si->seqLen)
-	die ("qual not same length as seq line %" PRIu64 "", si->line) ;
+	die ("qual not same length as seq line %llu", si->line) ;
       if (si->isQual) { char *q = sqioQual(si), *e = q + si->seqLen ; while (q < e) *q++ -= 33 ; }
       ++si->line ; bufAdvanceEndRecord(si) ;
     }
@@ -471,7 +471,7 @@ void seqIOflush (SeqIO *si)	/* writes buffer to file and resets to 0 */
   U64 retVal, nBytes = si->b - si->buf ;
   if (si->gzf) retVal = gzwrite (si->gzf, si->buf, nBytes) ;
   else retVal = write (si->fd, si->buf, nBytes) ;
-  if (retVal != nBytes) die ("seqio write error %" PRIu64 " not %" PRIu64 " bytes written", retVal, nBytes) ;
+  if (retVal != nBytes) die ("seqio write error %llu not %llu bytes written", retVal, nBytes) ;
   si->b = si->buf ;
   si->nb = si->bufSize ;
 }
@@ -799,21 +799,21 @@ U64 seqMatchPacked (U8 *a, U64 ia, U8 *b, U64 ib, U64 len)
       if (abuf[i] != bbuf[i])
 	{ abuf[len] = bbuf[len] = 0 ;
 	  if (d2 != d)
-	    printf ("SEQMATCH ia %d ib %d len %d d %" PRId64 " d2 %" PRId64 " abuf %s bbuf %s i %d\n",
+	    printf ("SEQMATCH ia %d ib %d len %d d %lld d2 %lld abuf %s bbuf %s i %d\n",
 		    iia, iib, ilen, d, d2, abuf, bbuf, i) ;
 	  return d ;
 	}
     }
   if (d2)
-    printf ("SEQMATCH ia %d ib %d len %d d %" PRId64 " d2 %" PRId64 " abuf %s bbuf %s i %d ca %c cb %c\n",
+    printf ("SEQMATCH ia %d ib %d len %d d %lld d2 %lld abuf %s bbuf %s i %d ca %c cb %c\n",
 	    iia, iib, ilen, d, d2, abuf, bbuf, i, ca, cb) ;
   d = 0 ; // if we get here then they all match
 
  end:
   if ((!d2 && d) || (d != d2 && d+32 < d2))
-    { printf ("seqMatch ia %d ib %d len %d d %" PRId64 " d2 %" PRId64 " a %s b %s\n",
+    { printf ("seqMatch ia %d ib %d len %d d %lld d2 %lld a %s b %s\n",
 	      iia, iib, ilen, d, d2, sa, sb) ;
-      printf ("   local d %" PRId64 "  uua %0" PRIx64 " uub %0" PRIx64 " chunk %d mask[chunk] %0" PRIx64 "\n",
+      printf ("   local d %lld  uua %0llx uub %0llx chunk %d mask[chunk] %0llx\n",
 	      d, uua, uub, chunk, mask[chunk]) ;
     }
   return d ;
