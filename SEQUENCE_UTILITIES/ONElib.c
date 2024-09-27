@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Sep 28 00:28 2024 (rd109)
+ * Last edited: Sep 28 00:41 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -2042,7 +2042,7 @@ bool oneAddProvenance(OneFile *vf, const char *prog, const char *version, char *
   p.program = (char*) prog; // cast to keep compiler happy - this is safe!
   p.version = (char*) version; // cast to keep compiler happy - this is safe!
   va_start (args, format) ;
-  (void) vasprintf (&p.command, format, args) ;
+  if (vasprintf (&p.command, format, args) == -1) die ("vasprintf failure") ;
   va_end (args) ;
   p.date = new (20, char);
   strftime(p.date, 20, "%F_%T", localtime(&t));
@@ -2532,7 +2532,7 @@ void oneWriteComment (OneFile *vf, char *format, ...)
   
   va_list args ;
   va_start (args, format) ; 
-  (void) vasprintf (&comment, format, args) ;
+  if (vasprintf (&comment, format, args) == -1) die ("vasprintf failure") ;
   va_end (args) ;
 
   if (vf->isCheckString) // then check no newlines in format
