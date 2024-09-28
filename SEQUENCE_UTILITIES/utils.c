@@ -5,7 +5,7 @@
  * Description: core utility functions
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 28 00:48 2024 (rd109)
+ * Last edited: Sep 28 01:31 2024 (rd109)
  * * Feb 22 14:52 2019 (rd109): added fzopen()
  * Created: Thu Aug 15 18:32:26 1996 (rd)
  *-------------------------------------------------------------------
@@ -116,7 +116,7 @@ char *fgetword (FILE *f)
 
 FILE *fzopen(const char *path, const char *mode)
 {  /* very cool from https://stackoverflow.com/users/3306211/fernando-mut */
-#if defined(WITH_ZLIB) && (defined(MACOS) || defined(__linux__))
+#if defined(WITH_ZLIB)
   gzFile zfp = 0 ;			/* fernando said *zfp - makes me worry.... */
 
   if (strlen(path) > 3 && !strcmp(&path[strlen(path)-3], ".gz")) // only gzopen on .gz files
@@ -125,13 +125,7 @@ FILE *fzopen(const char *path, const char *mode)
   if (!zfp) return fopen(path,mode);
 
   /* open file pointer */
-#ifdef MACOS
-  return funopen(zfp,
-                 (int(*)(void*,char*,int))gzread,
-                 (int(*)(void*,const char*,int))gzwrite,
-                 (fpos_t(*)(void*,fpos_t,int))gzseek,
-                 (int(*)(void*))gzclose) ;
-#else
+#ifdef __linux__
   { cookie_io_functions_t io_funcs ;
     io_funcs.read  = (void*) gzread ; // the void* are for cross-compiler happiness
     io_funcs.write = (void*) gzwrite ;
@@ -139,6 +133,12 @@ FILE *fzopen(const char *path, const char *mode)
     io_funcs.close = (void*) gzclose ;
     return fopencookie (zfp, mode, io_funcs) ;
   }
+#else // assume a Mac
+  return funopen(zfp,
+                 (int(*)(void*,char*,int))gzread,
+                 (int(*)(void*,const char*,int))gzwrite,
+                 (fpos_t(*)(void*,fpos_t,int))gzseek,
+                 (int(*)(void*))gzclose) ;
 #endif
 
 #else
