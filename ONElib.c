@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Dec  1 00:35 2024 (rd109)
+ * Last edited: Dec  1 10:31 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -1025,7 +1025,7 @@ static inline void readCompressedFields (FILE *f, OneField *field, OneInfo *li)
     switch (li->fieldType[i])
       {
       case oneREAL:
-	if (fread (&field[i].r, 8, 1, f) != 8) die ("failed to read a REAL") ;
+	if (fread (&field[i].r, 8, 1, f) != 1) die ("failed to read a REAL") ;
 	break ;
       case oneCHAR:
 	field[i].c = fgetc (f) ;
