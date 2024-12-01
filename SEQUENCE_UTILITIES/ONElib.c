@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Nov 30 23:46 2024 (rd109)
+ * Last edited: Dec  1 00:35 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -87,6 +87,12 @@ int       vcDecode(OneCodec *vc, int ilen, char *ibytes, char *obytes);
 
 static inline int ltfWrite (I64 x, FILE *f) ;
 static inline I64 ltfRead (FILE *f) ;
+
+// error handling
+
+static char errorString[1024] ;
+
+char *oneErrorString (void) { return errorString ; }
 
 /***********************************************************************************
  *
@@ -468,16 +474,18 @@ static void writeInfoSpec (FILE *f, OneFile *vf, char ci, char *comment) // also
     fprintf (f, " %s", comment) ;
 }
 
-void oneFileWriteSchema (OneFile *vf, char *filename)
+bool oneFileWriteSchema (OneFile *vf, char *filename)
 {
   int i ;
   FILE *f ;
 
-  if (!vf) return ;
+  if (!vf) die ("oneFileWriteSchema() passed a NULL OneFile object") ;
   if (!strcmp (filename, "-"))
     f = stdout ;
   else if (!(f= fopen (filename, "w")))
-    { fprintf (stderr, "failed to open %s to write schema into\n", filename) ; return ; }
+    { snprintf (errorString, 1024, "failed to open %s to write schema into\n", filename) ;
+      return false ;
+    }
 
   fprintf (f, "P %d %s", (int)strlen(vf->fileType), vf->fileType) ;
   if (vf->subType) fprintf (f, "\nS %d %s", (int)strlen(vf->subType), vf->subType) ;
@@ -487,6 +495,7 @@ void oneFileWriteSchema (OneFile *vf, char *filename)
   
   fprintf (f, "\n") ;
   fclose (f) ;
+  return true ;
 }
 
 /*************************************/
@@ -724,10 +733,10 @@ static void oneFileDestroy (OneFile *vf)
  *
  **********************************************************************************/
 
-void parseError (OneFile *vf, char *format, ...)
+static void parseDie (OneFile *vf, char *format, ...)
 { va_list args;
 
-  fprintf (stderr, "ONE PARSE ERROR ");
+  fprintf (stderr, "OneFile parse error: ");
 
   va_start (args, format);
   vfprintf (stderr, format, args);
@@ -750,7 +759,7 @@ static inline void eatWhite (OneFile *vf)
 { char x = vfGetc(vf);
   if (x == ' ') // 200414: removed option to have tab instead of space
     return;
-  parseError (vf, "failed to find expected space separation character lineType %c", vf->lineType);
+  parseDie (vf, "failed to find expected space separation character lineType %c", vf->lineType);
 }
 
 static inline char readChar(OneFile *vf)
@@ -771,7 +780,7 @@ static inline char *readBuf(OneFile *vf)
     }
   if (cp >= endBuf)
     { cp[-1] = 0;
-      parseError (vf, "overlong item %s", vf->numberBuf);
+      parseDie (vf, "overlong item %s", vf->numberBuf);
     }
   else
     { ungetc (x, vf->f);
@@ -788,9 +797,9 @@ static inline I64 readInt(OneFile *vf)
   b = readBuf(vf);
   x = strtoll(b, &e, 10);
   if (e == b)
-    parseError (vf, "empty int field");
+    parseDie (vf, "empty int field");
   if (*e != '\0')
-    parseError (vf, "bad int");
+    parseDie (vf, "bad int");
   return x;
 }
 
@@ -801,9 +810,9 @@ static inline double readReal(OneFile *vf)
   b = readBuf(vf);
   x = strtod (b, &e);
   if (e == b)
-    parseError (vf, "empty real field");
+    parseDie (vf, "empty real field");
   if (*e != '\0')
-    parseError (vf, "bad real");
+    parseDie (vf, "bad real");
   return (x);
 }
 
@@ -816,7 +825,7 @@ static inline void readString(OneFile *vf, char *buf, I64 n)
         if (*cp == '\n' || *cp == EOF)
       break;
       if (++n)
-        parseError (vf, "line too short %d", buf);
+        parseDie (vf, "line too short %d", buf);
       *++cp = 0;
     }
   else
@@ -836,7 +845,7 @@ static inline void readFlush (OneFile *vf) // reads to the end of the line and s
   if (x == '\n')
     return ;
   else if (x != ' ')
-    parseError (vf, "comment not separated by a space") ;
+    parseDie (vf, "comment not separated by a space") ;
 
   // else the remainder of the line is a comment
   if (!li->bufSize)
@@ -845,7 +854,7 @@ static inline void readFlush (OneFile *vf) // reads to the end of the line and s
     }
   while ((x = getc (vf->f)) && x != '\n')
     if (x == EOF)
-      parseError (vf, "premature end of file");
+      parseDie (vf, "premature end of file");
     else
       { if ((n+1) >= li->bufSize)
 	  { char *s = new (2*li->bufSize, char) ;
@@ -1096,7 +1105,7 @@ char oneReadLine (OneFile *vf)
 
   li = vf->info[(int) t];
   if (li == NULL)
-    parseError (vf, "unknown line type %c (%d was %d) line %d", t, t, x, (int)vf->line);
+    parseDie (vf, "unknown line type %c (%d was %d) line %d", t, t, x, (int)vf->line);
   if (li->accum.count >= 0) // after goto set to -1 for unindexed linetypes - can't know the count
     li->accum.count += 1 ;  // includes update of indexed type counts
 
@@ -1340,10 +1349,6 @@ OneFile *readThreadMake (OneFile *vfOld, OneSchema *vs0, FILE **files)
  *
  **********************************************************************************/
 
-static char errorString[1024] ;
-
-char *oneErrorString (void) { return errorString ; }
-
 OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileType, int nthreads)
 {
   OneFile   *vf ;
@@ -1456,7 +1461,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
       switch (vf->lineType)
 	{
 	case '1':
-          parseError(vf, "1 should be first line in header");
+          parseDie(vf, "1 should be first line in header");
           break;
 
         case '2':
@@ -1514,7 +1519,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
         case '%':
           { char      c = oneChar(vf,0);
             OneInfo *li = vf->info[(int) c] ;
-            if (li == NULL) parseError (vf, "unknown line type %c", c);
+            if (li == NULL) parseDie (vf, "unknown line type %c", c);
             switch (vf->lineType)
             { case '#':
                 li->given.count = oneInt(vf,1);
@@ -1533,19 +1538,19 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
                 li->given.total = oneInt(vf,1);
                 break;
               case '%':
-                { if (!li->isObject) parseError (vf, "% on a non-object type %c", c) ;
+                { if (!li->isObject) parseDie (vf, "% on a non-object type %c", c) ;
 		  if (!li->stats) initialiseStats (vf) ;
 		  int j = oneChar(vf,2);
 		  OneStat *s ;
 		  for (s = li->stats ; s->type && s->type != j ; ++s)
-		  if (!s->type) parseError (vf, "unknown line type %c", j);
+		  if (!s->type) parseDie (vf, "unknown line type %c", j);
 		  c = oneChar(vf,1);
 		  if (c == '#')
 		    s->maxCount = oneInt(vf,3);
 		  else if (c == '+')
 		    s->maxTotal = oneInt(vf,3);
 		  else
-		    parseError (vf, "unrecognised symbol %c", c);
+		    parseDie (vf, "unrecognised symbol %c", c);
 		}
 		break;
             } /*  */
@@ -1611,7 +1616,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
           break;
 
         default:
-          parseError (vf, "unknown header line type %c", vf->lineType);
+          parseDie (vf, "unknown header line type %c", vf->lineType);
           break;
       }
     }
@@ -1650,8 +1655,7 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *vsArg, const char *fileTy
     { int i ;
       FILE **files = new (nthreads, FILE*) ;
 
-      if (strcmp (path, "-") == 0)
-	die ("ONE error: parallel input incompatible with stdin as input");
+      if (strcmp (path, "-") == 0) die ("ONE error: parallel input incompatible with stdin as input");
 
       for (i = 1 ; i < nthreads ; ++i) files[i] = fopen (path, "r") ;
       vf = readThreadMake (vf, vs0, files) ;
@@ -2927,10 +2931,7 @@ OneCodec *vcCreate()
   int i;
 
   v = (_OneCodec *) malloc(sizeof(_OneCodec));
-  if (v == NULL)
-    { fprintf(stderr,"vcCreate: Could not allocate compressor\n");
-      exit (1);
-    }
+  if (v == NULL) die ("vcCreate: Could not allocate compressor") ;
 
   v->state = EMPTY;
   for (i = 0; i < 256; i++)
@@ -2977,14 +2978,8 @@ void vcAddHistogram(OneCodec *vc, OneCodec *vh)
   _OneCodec *h = (_OneCodec *) vh;
   int i;
 
-  if (v->state >= CODED_WITH)
-    { fprintf(stderr,"vcAddHistogram: Compressor already has a codec\n");
-      exit (1);
-    }
-  if (h->state == CODED_READ)
-    { fprintf(stderr,"vcAddHistogram: Source compressor doesn't have a histogram\n");
-      exit (1);
-    }
+  if (v->state >= CODED_WITH) die("vcAddHistogram: Compressor already has a codec");
+  if (h->state == CODED_READ) die("vcAddHistogram: Source compressor doesn't have a histogram");
 
   for (i = 0; i < 256; i++)
     v->hist[i] += h->hist[i];
@@ -3020,14 +3015,8 @@ void vcCreateCodec(OneCodec *vc, int partial)
 
   int      i;
 
-  if (v->state >= CODED_WITH)
-    { fprintf(stderr,"vcCreateCoder: Compressor already has a codec\n");
-      exit (1);
-    }
-  if (v->state == EMPTY)
-    { fprintf(stderr,"vcCreateCoder: Compressor has no byte distribution data\n");
-      exit (1);
-    }
+  if (v->state >= CODED_WITH) die("vcCreateCoder: Compressor already has a codec");
+  if (v->state == EMPTY) die("vcCreateCoder: Compressor has no byte distribution data");
 
   hist  = v->hist;
   look  = v->lookup;
@@ -3224,10 +3213,7 @@ void vcPrint(OneCodec *vc, FILE *to)
       return;
     }
 
-  if (v->state < CODED_WITH)
-    { fprintf(stderr,"vcPrint: Compressor has no codec\n");
-      exit (1);
-    }
+  if (v->state < CODED_WITH) die("vcPrint: Compressor has no codec");
   hashist = (v->state == CODED_WITH);
 
   bits = v->codebits;
@@ -3310,10 +3296,7 @@ int vcSerialize(OneCodec *vc, void *out)
   if (vc == DNAcodec)
     return (0);
 
-  if (v->state < CODED_WITH)
-    { fprintf(stderr,"vcWrite: Compressor does not have a codec\n");
-      exit (1);
-    }
+  if (v->state < CODED_WITH) die("vcWrite: Compressor does not have a codec");
 
   lens = v->codelens;
   bits = v->codebits;
@@ -3352,10 +3335,7 @@ OneCodec *vcDeserialize(void *in)
   int      i, j, powr;
 
   v = (_OneCodec *) malloc(sizeof(_OneCodec));
-  if (v == NULL)
-    { fprintf(stderr,"vcRead: Could not allocate compressor\n");
-      exit (1);
-    }
+  if (v == NULL) die("vcRead: Could not allocate compressor");
 
   v->state = CODED_READ;
   lens = v->codelens;
@@ -3498,10 +3478,7 @@ int vcEncode(OneCodec *vc, int ilen, char *ibytes, char *obytes)
   if (vc == DNAcodec)
     return (Compress_DNA(ilen,ibytes,obytes));
 
-  if (v->state < CODED_WITH)
-    { fprintf(stderr,"vcEncode: Compressor does not have a codec\n");
-      exit (1);
-    }
+  if (v->state < CODED_WITH) die("vcEncode: Compressor does not have a codec");
 
   esc   = v->esc_code;
   elen  = v->esc_len;
@@ -3539,10 +3516,7 @@ int vcEncode(OneCodec *vc, int ilen, char *ibytes, char *obytes)
     { x = ibytes[k];
       n = clens[x];
       if (n == 0)
-        { if (esc < 0)
-            { fprintf(stderr,"Compression lib: No code for %c(%x) and no escape code\n",x,x);
-              exit (1);
-            }
+        { if (esc < 0) die("Compression lib: No code for %c(%x) and no escape code",x,x);
           c = cbits[esc];
           tbits += 8+elen;
           if (tbits > ibits)
@@ -3648,10 +3622,7 @@ int vcDecode(OneCodec *vc, int ilen, char *ibytes, char *obytes)
   if (vc == DNAcodec)
     return (Uncompress_DNA(ibytes,ilen>>1,obytes));
 
-  if (v->state < CODED_WITH)
-    { fprintf(stderr,"vcDecode: Compressor does not have a codec\n");
-      exit (1);
-    }
+  if (v->state < CODED_WITH) die("vcDecode: Compressor does not have a codec");
 
   if (*((uint8 *) ibytes) == 0xff)
     { int olen = (ilen>>3)-1;

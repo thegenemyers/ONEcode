@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Nov 30 23:53 2024 (rd109)
+ * Last edited: Dec  1 00:28 2024 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -239,15 +239,16 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
 
 void oneSchemaDestroy (OneSchema *schema) ;
 
-void oneFileWriteSchema (OneFile *of, char *filename) ;
+bool oneFileWriteSchema (OneFile *of, char *filename) ;
 
   // Utility to write the schema of an open oneFile in a form that can be read by
   //   oneSchemaCreateFromFile().
 
 //  READING ONE FILES:
 
-char* oneErrorString  (void) ; // gives information on error for routines returning NULL
-// e.g. if fail to open a OneFile
+char* oneErrorString  (void) ; // gives information on errors for routines that fail
+                               // e.g. if oneFileOpenRead() or oneFileOpenWrite() return NULL
+                               // or oneFileCheckSchema*() returns false.
 
 OneFile *oneFileOpenRead (const char *path, OneSchema *schema, const char *type, int nthreads) ;
 
@@ -277,18 +278,20 @@ bool oneFileCheckSchemaText (OneFile *of, const char *textSchema) ;
   // are satisfied.
   // It is also used by oneFileOpenRead() with isRequired false to check consistency.
 
-// accessing general information about the contents of a file
+// ACCESSING GENERAL INFORMATION ABOUT THE CONTENTS OF A FILE:
  
 bool  oneStats (OneFile *of, char lineType, I64 *count, I64 *max, I64 *total) ;
+
   // Report number of lines of specified lineType, maximum list length, total list length
 
 bool  oneStatsContains (OneFile *of, char objectType, char lineType, I64 *maxCount, I64 *maxTotal) ;
-  // Report the largest number of lineType within objectType, and the highest total list length
+
+  // Report the largest count of lineType within an objectType, and the highest total list length
 
 #define oneFileName(of)         ((of)->fileName)
 #define oneReferenceCount(of)   ((of)->info['<'] ? (of)->info['<']->accum.count : 0)
 
-// reading a oneFile
+// READING DATA:
 
 char oneReadLine (OneFile *of) ;
 
@@ -394,14 +397,14 @@ void oneWriteComment (OneFile *of, char *format, ...); // can not include newlin
 
   // Adds a comment to the current line. Extends line in ascii, adds special line type in binary.
 
-// CLOSING FILES (FOR BOTH READ & WRITE)
+// CLOSING FILES (FOR BOTH READ & WRITE):
 
 void oneFileClose (OneFile *of);
 
   // Close of (opened either for reading or writing). Finalizes counts, merges theaded files,
   // and writes footer if binary. Frees all non-user memory associated with of.
 
-//  GOTO & BUFFER MANAGEMENT
+//  GOTO & BUFFER MANAGEMENT:
 
 void oneUserBuffer (OneFile *of, char lineType, void *buffer);
 
