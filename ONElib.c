@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Dec  1 10:31 2024 (rd109)
+ * Last edited: Dec  1 11:28 2024 (rd109)
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
  * * Mar 11 02:49 2024 (rd109): fixed group bug found by Gene
@@ -2773,7 +2773,7 @@ static void oneFinalize (OneFile *vf)
       char *buf;
       buf = new (10000000, char);
       for (i = 1; i < vf->share; i++)
-	{ if (!fseek (vf[i].f, 0L, SEEK_SET))
+	{ if (fseek (vf[i].f, 0L, SEEK_SET) != 0)
 	    die ("ONEfile error: failed to rewind parallel file %d", i) ;
 	  while (!feof(vf[i].f) && (nread = fread (buf,1,10000000,vf[i].f)) > 0)
 	    if ((int) fwrite(buf,1,nread,vf->f) != nread)
