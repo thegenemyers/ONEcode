@@ -41,13 +41,13 @@
 /* #define ARRAY_CHECK */
 
 typedef struct ArrayStruct
-  { int   magic ;
+  { U64   magic ;
     char* base ;    /* char* since need to do pointer arithmetic in bytes */
-    int   dim ;     /* length of alloc'ed space in number of elements */
-    int   size ;    /* size of elements in bytes */
-    int   max ;     /* 1+largest element accessed via array() = number of active elements */
+    U64   dim ;     /* length of alloc'ed space in number of elements */
+    U64   size ;    /* size of elements in bytes */
+    U64   max ;     /* 1+largest element accessed via array() = number of active elements */
 #ifdef ARRAY_REPORT
-    int   id ;      /* unique identifier */
+    U64   id ;      /* unique identifier */
 #endif
   } *Array ;
  
@@ -57,26 +57,26 @@ typedef struct ArrayStruct
 
 #define ARRAY_MAGIC 8918274
 
-Array   uArrayCreate (int n, int size) ;
+Array   uArrayCreate (U64 n, U64 size) ;
 #define arrayCreate(n,type)	         uArrayCreate(n,sizeof(type))
-Array   uArrayReCreate (Array a, int n, int size) ;
+Array   uArrayReCreate (Array a, U64 n, U64 size) ;
 #define arrayReCreate(a,n,type)	         uArrayReCreate(a,n,sizeof(type))
 void    arrayDestroy (Array a) ;
 Array	arrayCopy (Array a) ;
-void    arrayExtend (Array a, int n) ;
+void    arrayExtend (Array a, U64 n) ;
 
      /* array() and arrayp() will extend the array if necessary */
 
-char    *uArray (Array a, int index) ;
+char    *uArray (Array a, U64 index) ;
 #define array(ar,i,type)	(*(type*)uArray(ar,i))
 #define arrayp(ar,i,type)	((type*)uArray(ar,i))
-char    *uArrayBlock (Array a, int i, int n) ;
+char    *uArrayBlock (Array a, U64 i, U64 n) ;
 #define arrayBlock(ar,i,n,type) ((type*)uArrayBlock(ar,i,n)) /* use when memset(), fread() etc multiple items */
 
      /* only use arr() when there is no danger of needing expansion */
 
 #if (defined(ARRAY_CHECK) && !defined(ARRAY_NO_CHECK))
-char    *uArrCheck (Array a, int index) ;
+char    *uArrCheck (Array a, U64 index) ;
 #define arr(ar,i,type)	(*(type*)uArrCheck(ar,i))
 #define arrp(ar,i,type)	((type*)uArrCheck(ar,i))
 #else
@@ -95,13 +95,13 @@ typedef int ArrayOrder(const void*, const void*) ;             /* call back func
 bool    arrayInsert(Array a, void * s, ArrayOrder *order);
 bool    arrayRemove(Array a, void * s, ArrayOrder *order);
 void    arrayCompress(Array a) ;
-bool    arrayFind(Array a, void *s, int *ip, ArrayOrder *order);
+bool    arrayFind(Array a, void *s, U64 *ip, ArrayOrder *order);
 
 #ifdef ARRAY_REPORT
 	/* status and memory monitoring */
 #define ARRAY_REPORT_MAX 0	/* set to maximum number of arrays to keep track of */
-void    arrayStatus (int *nmadep,int* nusedp, int *memAllocp, int *memUsedp) ; /* memUsed only up to REPORT_MAX */
-int     arrayReportMark (void) ; /* returns current array number */
+void    arrayStatus (U64 *nmadep, U64* nusedp, U64 *memAllocp, U64 *memUsedp) ; /* memUsed only up to REPORT_MAX */
+U64     arrayReportMark (void) ; /* returns current array number */
 void    arrayReport (int j) ;	/* write stderr about all arrays since j */
 #endif
 

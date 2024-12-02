@@ -26,7 +26,8 @@
  * Exported functions:
  *              See Header file: array.h (includes lots of macros)
  * HISTORY:
- * Last edited: May 29 12:52 2023 (rd109)
+ * Last edited: Sep 29 18:36 2024 (rd109)
+ * * Aug 31 22:04 2024 (rd109): added ArrayPool
  * * Feb 14 11:21 2011 (rd): modified in 2009/10 by RD for stand-alone use
  * Created: Thu Dec 12 15:43:25 1989 (mieg)
  *-------------------------------------------------------------------
@@ -36,20 +37,20 @@
 
 /********** Array : class to implement variable length arrays **********/
 
-static int totalAllocatedMemory = 0 ;
-static int totalNumberCreated = 0 ;
-static int totalNumberActive = 0 ;
+static U64 totalAllocatedMemory = 0 ;
+static U64 totalNumberCreated = 0 ;
+static U64 totalNumberActive = 0 ;
 static Array reportArray = 0 ;
 
 #define arrayExists(a) ((a) && (a)->magic == ARRAY_MAGIC)
 
-Array uArrayCreate (int n, int size)
+Array uArrayCreate (U64 n, U64 size)
 {
   Array a = (Array) mycalloc (1, sizeof (struct ArrayStruct)) ;
-  static int isFirst ;
+  static bool isFirst = true ;
 
   if (isFirst)
-    { isFirst = 0 ;
+    { isFirst = false ;
 #ifdef ARRAY_REPORT
       if (ARRAY_REPORT_MAX) reportArray = arrayCreate (512, Array) ;
 #endif
@@ -81,7 +82,7 @@ Array uArrayCreate (int n, int size)
 
 /**************/
 
-Array uArrayReCreate (Array a, int n, int size)
+Array uArrayReCreate (Array a, U64 n, U64 size)
 {
   if (!arrayExists(a))
     return  uArrayCreate (n, size) ;
@@ -92,11 +93,10 @@ Array uArrayReCreate (Array a, int n, int size)
   if (n < 1) n = 1 ;
 
   if (a->dim < n || (a->dim - n)*size > (1 << 20) ) /* free if save > 1 MB */
-    { totalAllocatedMemory -= a->dim * size ;
-      free (a->base) ;
+    { totalAllocatedMemory -= a->dim * size ; 
+      myfree (a->base, a->dim*size) ;
       a->dim = n ;
       totalAllocatedMemory += a->dim * size ;
-      /* base-mem isn't alloc'd on handle, it's free'd by finalisation */
       a->base = mycalloc (n, size) ;
     }
   else
@@ -113,15 +113,15 @@ void arrayDestroy (Array a)
   if (!arrayExists (a))
     die ("arrayDestroy called on bad array %lx", (long unsigned int) a) ;
 
-  totalAllocatedMemory -= a->dim * a->size ;
+  totalAllocatedMemory -= a->dim * a->size ; 
   totalNumberActive-- ;
 #ifdef ARRAY_REPORT
   if (reportArray)
     arr(reportArray, a->id, Array) = 0 ;
 #endif
   a->magic = 0 ;
-  free (a->base) ;
-  free (a) ;
+  myfree (a->base, a->dim*a->size) ;
+  newFree (a, 1, struct ArrayStruct) ;
 }
 
 /**************/
@@ -141,16 +141,15 @@ Array arrayCopy (Array a)
 
 /******************************/
 
-void arrayExtend (Array a, int n) 
+void arrayExtend (Array a, U64 n) 
 {
-  char *new ;
-
   if (!arrayExists (a))
     die ("arrayExtend called on bad array %lx", (long unsigned int) a) ;
 
   if (n < a->dim)
     return ;
 
+  U64 oldDim = a->dim ;
   totalAllocatedMemory -= a->dim * a->size ;
   if (a->dim*a->size < 1 << 23)	/* 8MB */
     a->dim *= 2 ;
@@ -161,17 +160,14 @@ void arrayExtend (Array a, int n)
 
   totalAllocatedMemory += a->dim * a->size ;
 
-  new = mycalloc (a->dim, a->size) ;
-  memcpy (new,a->base,a->size*a->max) ;
-  free (a->base) ;
-  a->base = new ;
+  a->base = newResize (a->base, oldDim*a->size, a->dim*a->size, char) ;
 
   return;
 }
 
 /***************/
 
-char *uArray (Array a, int i)
+char *uArray (Array a, U64 i)
 {
 #ifdef ARRAY_CHECK
   if (!arrayExists (a)) die ("array() called on bad array %lx", (long unsigned int) a) ;
@@ -184,7 +180,7 @@ char *uArray (Array a, int i)
   return a->base + i*a->size ;
 }
 
-char *uArrCheck (Array a, int i)
+char *uArrCheck (Array a, U64 i)
 {
   if (!arrayExists (a)) die ("array() called on bad array %lx", (long unsigned int) a) ;
   if (i < 0) die("referencing array element %d < 0", i) ;
@@ -195,7 +191,7 @@ char *uArrCheck (Array a, int i)
 
 /***************/
 
-char    *uArrayBlock (Array a, int i, int n)
+char    *uArrayBlock (Array a, U64 i, U64 n)
 {
 #ifdef ARRAY_CHECK
   if (!arrayExists (a)) die ("arrayBlock() called on bad array %lx", (long unsigned int)a) ;
@@ -222,7 +218,11 @@ Array   arrayRead (FILE *f)
   Array a = new (1, struct ArrayStruct) ;
   if (fread (a, sizeof(struct ArrayStruct), 1, f) != 1) return 0 ;
   a->base = myalloc (a->size*a->dim) ;
-  if (fread (a->base, a->size, a->dim, f) != a->dim) { free(a) ; return 0 ; }
+  if (fread (a->base, a->size, a->dim, f) != a->dim)
+    { myfree (a->base, a->size*a->dim) ;
+      newFree (a, 1, struct ArrayStruct) ;
+      return 0 ;
+    }
 #ifdef ARRAY_REPORT
   a->id = ++totalNumberCreated ;
   if (reportArray)
@@ -244,11 +244,11 @@ Array   arrayRead (FILE *f)
         * if not, returns false and sets *ip one step left
         */
 
-/* bool arrayFind(Array a, void *s, int *ip, int (* order)(void*, void*)) */
-bool arrayFind(Array a, void *s, int *ip, ArrayOrder *order)
+/* bool arrayFind(Array a, void *s, U64 *ip, U64 (* order)(void*, void*)) */
+bool arrayFind(Array a, void *s, U64 *ip, ArrayOrder *order)
 {
-  int ord ;
-  int i = 0 , j, k ;
+  U64 ord ;
+  U64 i = 0 , j, k ;
 
   if (!arrayExists (a)) 
     die ("arrayFind called on bad array %lx", (long unsigned int) a) ;
@@ -297,7 +297,7 @@ bool arrayFind(Array a, void *s, int *ip, ArrayOrder *order)
 
 bool arrayRemove (Array a, void * s, int (* order)(const void*, const void*))
 {
-  int i;
+  U64 i;
 
   if (!arrayExists (a))
     die ("arrayRemove called on bad array %lx", (long unsigned int) a) ;
@@ -308,7 +308,7 @@ bool arrayRemove (Array a, void * s, int (* order)(const void*, const void*))
        * and memcpy is said to fail with some compilers
        */
       char *cp = uArray(a,i), *cq = cp + a->size ;
-      int j = (arrayMax(a) - i)*(a->size) ;
+      U64 j = (arrayMax(a) - i)*(a->size) ;
       while (j--)
 	*cp++ = *cq++ ;
 
@@ -327,7 +327,7 @@ bool arrayRemove (Array a, void * s, int (* order)(const void*, const void*))
 
 bool arrayInsert(Array a, void * s, int (*order)(const void*, const void*))
 {
-  int i, j, arraySize;
+  U64 i, j, arraySize;
 
   if (!arrayExists (a))
     die ("arrayInsert called on bad array %x", (long unsigned int)a) ;
@@ -343,7 +343,7 @@ bool arrayInsert(Array a, void * s, int (*order)(const void*, const void*))
 	/* avoid memcpy for same reasons as above */
   {
     char *cp, *cq ;
-    int k ;
+    U64 k ;
     
     if (arraySize > 0)
       { cp = uArray(a,j - 1) + a->size - 1 ;
@@ -366,7 +366,7 @@ bool arrayInsert(Array a, void * s, int (*order)(const void*, const void*))
 
 void arrayCompress(Array a)
 {
-  int i, j, k , as ;
+  U64 i, j, k , as ;
   char *x, *y, *ab ;
 
   if (!arrayExists (a))
@@ -396,7 +396,7 @@ void arrayCompress(Array a)
 
 /**************/
 
-int arrayReportMark (void)
+U64 arrayReportMark (void)
 {
   if (reportArray)
     return arrayMax (reportArray) ;
@@ -406,12 +406,12 @@ int arrayReportMark (void)
 
 /**************/
 
-void arrayReport (int j)
+void arrayReport (U64 j)
 {
-  int i ;
+  U64 i ;
   Array a ;
 
-  fprintf(stderr, "Array report: %d created, %d active, %d MB allocated\n",   
+  fprintf(stderr, "Array report: %llu created, %llu active, %llu MB allocated\n",   
 	  totalNumberCreated, totalNumberActive, totalAllocatedMemory/(1024*1024)) ;
 
   if (reportArray)
@@ -419,16 +419,16 @@ void arrayReport (int j)
       while (i-- && i > j)
 	{ a = arr (reportArray, i, Array) ;
 	  if (arrayExists(a))
-	    fprintf (stderr, " array %d  size %d, max %d\n", i, a->size, a->max) ;
+	    fprintf (stderr, " array %llu size %llu max %llu\n", i, a->size, a->max) ;
 	}
     }
 }
 
 /**************/
 
-void arrayStatus (int *nmadep, int *nusedp, int *memAllocp, int *memUsedp)
+void arrayStatus (U64 *nmadep, U64 *nusedp, U64 *memAllocp, U64 *memUsedp)
 { 
-  int i ;
+  U64 i ;
   Array a ;
 
   *nmadep = totalNumberCreated ; 
@@ -443,5 +443,4 @@ void arrayStatus (int *nmadep, int *nusedp, int *memAllocp, int *memUsedp)
 }
 
 /************************  end of file ********************************/
-/**********************************************************************/
  
