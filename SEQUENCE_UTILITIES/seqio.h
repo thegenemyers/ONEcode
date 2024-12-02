@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Aug 14 10:12 2024 (rd109)
+ * Last edited: Oct 19 02:07 2024 (rd109)
  * * Dec 20 23:23 2022 (rd109): fully revised SeqPack and QualPack
  * Created: Sat Nov 10 08:51:49 2018 (rd109)
  *-------------------------------------------------------------------
@@ -24,19 +24,23 @@
 
 typedef struct {
   char unconv[5] ;		/* 5 so we can strcpy() into it for coding simplicity */
-  U32  seqExpand[256] ;
+  char unconvC[5] ;
+  U32  byteExpand[256] ;
+  U32  byteExpandC[256] ;
 } SeqPack ;
 
 SeqPack *seqPackCreate (char unpackA) ; 
-		/* unpackA = 0 maps to 0123, a to acgt, A to ACGT and 1 to 4-bit 1248 */
-#define  seqPackDestroy(sp) free(sp)
+	/* unpackA = 0 maps to 0123, a to acgt, A to ACGT and 1 to 4-bit 1248 */
+#define  seqPackDestroy(sp) newFree(sp,1,SeqPack)
 U8*      seqPack (SeqPack *sp, char *s, U8 *u, U64 len) ;
-		/* compress s into u if non-zero else allocates memory, returns packed array */
+U8*      seqPackRevComp (SeqPack *sp, char *s, U8 *u, U64 len) ; /* packs the RC of the sequence s */
+	/* compress s into u if non-zero else allocates memory, returns packed array */
 char*    seqUnpack (SeqPack *sp, U8 *u, char *s, U64 i, U64 len) ;
-		/* uncompress u, memory/return like seqPack(), i is offset */
+char*    seqUnpackRevComp (SeqPack *sp, U8 *u, char *s, U64 i, U64 len) ;
+	/* uncompress u into s, memory/return like seqPack(), len and offset i in base coords */
 U8*      seqRevCompPacked (U8 *u, U8 *rc, U64 len) ; /* reverse complements 2-bit packed binary */
 U64      seqMatchPacked (U8 *a, U64 ia, U8 *b, U64 ib, U64 len) ;
-		/* returns 0 if match, index+1 of first mismatching site if mismatch */
+	/* returns 0 if match, index+1 of first mismatching site if mismatch */
 
 /* QualPack is similar for 1-bit qualities, mapping q < qualThresh to 0, q >= qualThresh to 1 */
 
@@ -47,8 +51,8 @@ typedef struct {
 
 QualPack *qualPackCreate (int qualThresh) ;
 #define   qualPackDestroy(sp) free(sp)
-U8*   qualPack (QualPack *qp, char *q, U8 *u, U64 len) ; /* compress q into (len+7)/8 u */
-char* qualUnpack (QualPack *qp, U8 *u, char *q, U64 len) ; /* uncompress (len+7)/8 u into q */
+U8*       qualPack (QualPack *qp, char *q, U8 *u, U64 len) ; /* compress q into (len+7)/8 u */
+char*     qualUnpack (QualPack *qp, U8 *u, char *q, U64 len) ; /* uncompress (len+7)/8 u into q */
 
 /* SeqIO for flexible and efficient IO - I implement my own buffering */
 
@@ -82,20 +86,20 @@ typedef struct {
 /* So the user does not own the pointers. */
 /* Add 0 terminators to ids.  Convert sequences in place if convert != 0, and quals if isQual. */
 
-SeqIO *seqIOopenRead (char *filename, int* convert, bool isQual) ; /* can use "-" for stdin */
-bool seqIOread (SeqIO *si) ;
+SeqIO  *seqIOopenRead (char *filename, int* convert, bool isQual) ; /* can use "-" for stdin */
+bool    seqIOread (SeqIO *si) ;
 #define sqioId(si)   ((si)->buf+(si)->idStart)
 #define sqioDesc(si) ((si)->buf+(si)->descStart)
 #define sqioSeq(si)  ((si)->type >= BINARY ? (si)->seqBuf : (si)->buf+(si)->seqStart)
 #define sqioQual(si) ((si)->type >= BINARY ? (si)->qualBuf : (si)->buf+(si)->qualStart)
 
-void seqIOreferenceFileName (char *refFileName) ; /* resets this (globally) for CRAM */
+void    seqIOreferenceFileName (char *refFileName) ; /* resets this (globally) for CRAM */
 
-SeqIO *seqIOopenWrite (char *filename, SeqIOtype type, int* convert, int qualThresh) ;
-void seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *qual) ;
-void seqIOflush (SeqIO *si) ;	/* NB writes are buffered, so need this to ensure in file */
+SeqIO  *seqIOopenWrite (char *filename, SeqIOtype type, int* convert, int qualThresh) ;
+void    seqIOwrite (SeqIO *si, char *id, char *desc, U64 seqLen, char *seq, char *qual) ;
+void    seqIOflush (SeqIO *si) ;	/* NB writes are buffered, so need this to ensure in file */
 
-void seqIOclose (SeqIO *si) ;	/* will flush file opened for writing */
+void    seqIOclose (SeqIO *si) ;	/* will flush file opened for writing */
 
 /* For ONEcode files, instead of seqio opening the file you can pass the OneCode handle. */
 /* The handle must have primary type seq and support at least this schema (it can contain more). */

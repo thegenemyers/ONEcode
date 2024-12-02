@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 28 00:55 2024 (rd109)
+ * Last edited: Nov 23 19:16 2024 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -173,7 +173,7 @@ void seqIOclose (SeqIO *si)
 #endif
 #ifdef BAMIO
   if (si->type == BAM)
-    bamFileClose (si->handle) ;
+    bamFileClose (si) ;
 #endif
   free (si) ;
 }
@@ -608,10 +608,16 @@ SeqPack *seqPackCreate (char unpackA)
   SeqPack *sp = new (1, SeqPack) ;
   switch (unpackA)
     {
-    case 0: sp->unconv[0] = 0; sp->unconv[1] = 1; sp->unconv[2] = 2; sp->unconv[3] = 3; break ;
-    case 1: sp->unconv[0] = 1; sp->unconv[1] = 2; sp->unconv[2] = 4; sp->unconv[3] = 8; break ;
-    case 'a': strcpy (sp->unconv, "acgt") ; break ;
-    case 'A': strcpy (sp->unconv, "ACGT") ; break ;
+    case 0:
+      sp->unconv[0] = 0; sp->unconv[1] = 1; sp->unconv[2] = 2; sp->unconv[3] = 3;
+      sp->unconvC[0] = 3; sp->unconvC[1] = 2; sp->unconvC[2] = 1; sp->unconv[3] = 0;
+      break ;
+    case 1:
+      sp->unconv[0] = 1; sp->unconv[1] = 2; sp->unconv[2] = 4; sp->unconv[3] = 8;
+      sp->unconvC[0] = 8; sp->unconvC[1] = 4; sp->unconv[2] = 2; sp->unconv[3] = 1;
+      break ;
+    case 'a': strcpy (sp->unconv, "acgt") ; strcpy (sp->unconvC, "tgca") ; break ;
+    case 'A': strcpy (sp->unconv, "ACGT") ; strcpy (sp->unconvC, "TGCA") ; break ;
     default: 
       die ("seqPackCreate: unrecognised unpackA character %d = %c - must be one of a, A, 0, 1",
 	   unpackA, unpackA) ;
@@ -619,21 +625,34 @@ SeqPack *seqPackCreate (char unpackA)
   int i, j ;
   for (i = 0 ; i < 256 ; ++i)
     { U8 u ;
-      char *s = (char*)&sp->seqExpand[i] ;
+      char *s = (char*)&sp->byteExpand[i] ;
       u = i ; for (j = 0 ; j < 4 ; ++j) { s[j] = sp->unconv[u & 0x03] ; u >>= 2 ; }
+      s = (char*)&sp->byteExpandC[i] ;
+      u = i ; for (j = 4 ; j-- ; ) { s[j] = sp->unconvC[u & 0x03] ; u >>= 2 ; }
     }
   return sp ;
 }
 
-static U8 packConv[] = {    /* sends N (indeed any non-CGT) to A, except 0,1,2,3 are maintained */
-   0,   1,   2,   3,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
-   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
-   0,   0,   0,   1,   0,   0,   0,   2,   0,   0,   0,   0,   0,   0,   0,   0,
-   0,   0,   0,   0,   3,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-   0,   0,   0,   1,   0,   0,   0,   2,   0,   0,   0,   0,   0,   0,   0,   0,
-   0,   0,   0,   0,   3,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
+static U8 pack[] = {    // sends N (indeed any non-CGT) to A, except 0,1,2,3 are maintained
+   0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+} ;
+
+static U8 packC[] = {   // same but send to the complement
+   3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+   0, 3, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 3, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 } ;
 
 U8* seqPack (SeqPack *sp, char *s, U8 *u, U64 len) /* compress s into (len+3)/4 u */
@@ -641,24 +660,42 @@ U8* seqPack (SeqPack *sp, char *s, U8 *u, U64 len) /* compress s into (len+3)/4 
   if (!u) u = new((len+3)/4,U8) ;
   U8 *u0 = u ;
   while (len >= 4)
-    { *u++ = packConv[(int)s[0]] | (packConv[(int)s[1]] << 2) |
-	(packConv[(int)s[2]] << 4) | (packConv[(int)s[3]] << 6) ;
+    { *u++ = pack[(int)s[0]] | (pack[(int)s[1]] << 2) |
+	(pack[(int)s[2]] << 4) | (pack[(int)s[3]] << 6) ;
       len -= 4 ; s += 4 ;
     }
   switch (len)
-    {
-    case 3: *u++ = packConv[(int)s[0]] | (packConv[(int)s[1]] << 2) |
-	(packConv[(int)s[2]] << 4) ; break ;
-    case 2: *u++ = packConv[(int)s[0]] | (packConv[(int)s[1]] << 2) ; break ;
-    case 1: *u++ = packConv[(int)s[0]] ; break ;
-    case 0: break ;
+    { case 3: *u++ = pack[(int)s[0]] | (pack[(int)s[1]] << 2) |	(pack[(int)s[2]] << 4) ; break ;
+      case 2: *u++ = pack[(int)s[0]] | (pack[(int)s[1]] << 2) ; break ;
+      case 1: *u++ = pack[(int)s[0]] ; break ;
+      case 0: break ;
+    }
+  return u0 ;
+}
+
+U8* seqPackRevComp (SeqPack *sp, char *s, U8 *u, U64 len) /* packs the RC of the sequence s */
+{
+  if (!u) u = new((len+3)/4,U8) ;
+  U8 *u0 = u ;
+  s += len-4 ;
+  while (len >= 4)
+    { *u++ = packC[(int)s[3]] | (packC[(int)s[2]] << 2) |
+	(packC[(int)s[1]] << 4) | (packC[(int)s[0]] << 6) ;
+      len -= 4 ; s-= 4 ;
+    }
+  switch (len)
+    { case 3: *u++ = packC[(int)s[3]] | (packC[(int)s[2]] << 2) | (packC[(int)s[1]] << 4) ; break ;
+      case 2: *u++ = packC[(int)s[3]] | (packC[(int)s[2]] << 2) ; break ;
+      case 1: *u++ = packC[(int)s[3]] ; break ;
+      default: break ;
     }
   return u0 ;
 }
 
 char* seqUnpack (SeqPack *sp, U8 *u, char *s, U64 i, U64 len)
 {
-  if (!s) s = new(len,char) ;
+  if (!s) s = (*sp->unconv >= 'A') ? new(len+1,char) : new(len,char) ;
+  if (*sp->unconv >= 'A') s[len] = 0 ; // 0-terminate if alphabetical
   char *s0 = s ;
   u += (i >> 2) ; i = (i & 3) ; // first offset and go to byte (U8) boundary
   if (i)
@@ -668,7 +705,7 @@ char* seqUnpack (SeqPack *sp, U8 *u, char *s, U64 i, U64 len)
     }
   if (len)
     { while (len >= 4)
-	{ *(U32*)s = sp->seqExpand[*u] ;
+	{ *(U32*)s = sp->byteExpand[*u] ;
 	  ++u ; s += 4 ; len -= 4 ;
 	}
       switch (len) // note fall through
@@ -676,6 +713,34 @@ char* seqUnpack (SeqPack *sp, U8 *u, char *s, U64 i, U64 len)
 	case 3: s[2] = sp->unconv[(*u >> 4) & 3] ;
 	case 2: s[1] = sp->unconv[(*u >> 2) & 3] ;
 	case 1: s[0] = sp->unconv[*u & 3] ; 
+	case 0: break ;
+	}
+    }
+  return s0 ;
+}
+
+char* seqUnpackRevComp (SeqPack *sp, U8 *u, char *s, U64 i, U64 len)
+{
+  if (!s) s = (*sp->unconv >= 'A') ? new(len+1,char) : new(len,char) ;
+  if (*sp->unconvC >= 'A') s[len] = 0 ; // 0-terminate if alphabetical
+  char *s0 = s+len ;
+  u += (i >> 2) ; i = (i & 3) ; // first offset and go to byte (U8) boundary
+  if (i)
+    { U8 uu = *u >> 2*i ;
+      while ((i++ < 4) && len) { *--s = sp->unconvC[uu & 3] ; uu >>= 2 ; len-- ; }
+      ++u ;
+    }
+  if (len)
+    { while (len >= 4)
+	{ s -= 4 ;
+	  *(U32*)s = sp->byteExpandC[*u] ;
+	  ++u ; len -= 4 ;
+	}
+      switch (len) // note fall through
+	{
+	case 3: s[-3] = sp->unconvC[(*u >> 4) & 3] ;
+	case 2: s[-2] = sp->unconvC[(*u >> 2) & 3] ;
+	case 1: s[-1] = sp->unconvC[*u & 3] ; 
 	case 0: break ;
 	}
     }
