@@ -5,7 +5,7 @@
  * Description: core utility functions
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 28 01:31 2024 (rd109)
+ * Last edited: Sep 29 18:31 2024 (rd109)
  * * Feb 22 14:52 2019 (rd109): added fzopen()
  * Created: Thu Aug 15 18:32:26 1996 (rd)
  *-------------------------------------------------------------------
@@ -58,7 +58,7 @@ void storeCommandLine (int argc, char **argv)
 
 char *getCommandLine (void) { return commandLine ; }
 
-unsigned long totalAllocated = 0 ;
+static unsigned long totalAllocated = 0 ;
 static unsigned long maxAllocated = 0 ;
 
 void *myalloc (size_t size)
@@ -79,6 +79,20 @@ void *mycalloc (size_t number, size_t size)
   totalAllocated += size*number ;
   if (totalAllocated > maxAllocated) maxAllocated = totalAllocated ;
   return p ;
+}
+
+void  myfree   (void* x, size_t size)
+{
+  totalAllocated -= size ;
+  if (x) free (x) ; // allows to reduce size
+}
+
+void *myresize (void* x, size_t nOld, size_t nNew, size_t size)
+{
+  void *z = mycalloc (nNew, size) ;
+  if (nOld < nNew) memcpy (z, x, nOld*size) ; else memcpy (z, x, nNew*size) ;
+  myfree (x, nOld*size) ;
+  return z ;
 }
 
 char *fgetword (FILE *f)
