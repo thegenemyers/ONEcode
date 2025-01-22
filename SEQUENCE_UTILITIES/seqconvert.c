@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 28 00:53 2024 (rd109)
+ * Last edited: Jan  4 13:33 2025 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -41,9 +41,9 @@ int main (int argc, char *argv[])
       fprintf (stderr, "   -H  : homopolymer compress (hoco) - stores run lengths if ONEcode\n") ;
       fprintf (stderr, "   -U  : homopolymer uncompress - only works on ONEcode input\n") ;
       fprintf (stderr, "   -t  : show time and memory usage\n") ;
-      // fprintf (stderr, "   -K  : scaffold break sequences at >KT N's - stores breaks if ONEcode\n") ;
-      // fprintf (stderr, "   -J  : scaffold rejoin - only works on ONEcode input\n") ;
-      // fprintf (stderr, "   -KT : sets the threshold for scaffold breaking [20]\n") ;
+      fprintf (stderr, "   -K  : scaffold break sequences at >KT N's - stores breaks if ONEcode\n") ;
+      fprintf (stderr, "   -J  : scaffold rejoin - only works on ONEcode input\n") ;
+      fprintf (stderr, "   -KT : sets the threshold for scaffold breaking [20]\n") ;
       fprintf (stderr, "   NB gzip is not compatible with binary\n") ;
       fprintf (stderr, "   if no infile then use stdin\n") ;
       fprintf (stderr, "   if no -o option then use stdout and -z implies gzip\n");
@@ -74,10 +74,10 @@ int main (int argc, char *argv[])
       else if (!strcmp (*argv, "-H")) isHoco = true ;
       else if (!strcmp (*argv, "-U")) isUnHoco = true ;
       else if (!strcmp (*argv, "-t")) isTime = true ;
-      //      else if (!strcmp (*argv, "-K")) isScaffold = true ;
-      //      else if (!strcmp (*argv, "-J")) isJoin = true ;
-      //      else if (!strcmp (*argv, "-KT") && argc > 1)
-      //	{ --argc ; ++argv ; scaffThresh = atoi (*argv) ; }
+      else if (!strcmp (*argv, "-K")) isScaffold = true ;
+      else if (!strcmp (*argv, "-J")) isJoin = true ;
+      else if (!strcmp (*argv, "-KT") && argc > 1)
+	{ --argc ; ++argv ; scaffThresh = atoi (*argv) ; }
       else if (!strcmp (*argv, "-o") && argc > 1)
 	{ --argc ; ++argv ; outFileName = *argv ; }
       else if (!strcmp (*argv, "-S")) isVerbose = false ;
@@ -100,7 +100,9 @@ int main (int argc, char *argv[])
     { OneSchema *schema = oneSchemaCreateFromText (scaffoldSchemaText) ;
       OneFile *vf = oneFileOpenWriteNew (outFileName, schema, "seq", true, 1) ;
       oneSchemaDestroy (schema) ;
+      if (!vf) die ("didn't open %s", outFileName) ;
       siOut = seqIOadoptOneFile (vf, 0, qualThresh) ;
+      if (!siOut) die ("didn't adopt %s", outFileName) ;
     }
   else
     siOut = seqIOopenWrite (outFileName, type, 0, qualThresh) ;
@@ -285,13 +287,13 @@ static char *scaffoldSchemaText =
   "1 3 def 1 0  schema for seqconvert to scafffold\n"
   ".\n"
   "P 3 seq SEQUENCE\n"
-  "O s 2 3 INT 6 STRING    scaffold: length then names, made of S objects and n lines\n"
-  "D g 1 3 INT             gap: length of block of n's in scaffold\n"
-  "G S                     scaffolds group sequences\n"
-  "O S 1 3 DNA             sequence: the DNA string\n"
-  "D I 1 6 STRING          id: (optional) sequence identifier\n"
-  "D Q 1 6 STRING          quality: Q values (ascii string = q+33)\n"
-  "D N 2 3 INT 4 CHAR      non-acgt base\n" ;
+  "O s 2 3 INT 6 STRING      scaffold: length then names, made of S objects and n lines\n"
+  "D g 1 3 INT               gap: length of block of n's in scaffold\n"
+  "G S                       scaffolds group sequences\n"
+  "O S 1 3 DNA               sequence: the DNA string\n"
+  "D I 1 6 STRING            id: (optional) sequence identifier\n"
+  "D Q 1 6 STRING            quality: Q values (ascii string = q+33)\n"
+  "D N 3 3 INT 4 CHAR 3 INT  non-acgt base\n" ;
 
 static void scaffoldBreak (SeqIO *siOut, char *id, char *desc, U64 seqLen, char *seq, char *qual,
 			   int scaffThresh)
