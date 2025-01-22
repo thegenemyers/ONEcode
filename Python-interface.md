@@ -30,5 +30,26 @@ onefile = ONEcode.ONEfile("...", "r", schema, "...", 1)
 onefile.readLine()
 ```
 
+### Test:
+```Python
+import ONEcode
+
+schema = ONEcode.ONEschema(
+  "P 3 seq                 SEQUENCE\n"
+  "S 6 segseq              segment sequences - objects are 1:1 with those in seg file\n"
+  "S 7 readseq             read sequences\n"
+  "O S 1 3 DNA             sequence: the DNA string\n"
+  "D I 1 6 STRING          id - sequence identifier; unnecessary for segments\n"
+)
+
+onefile = ONEcode.ONEfile("./TEST/small.seq", "r", schema, "", 1)
+
+print("Opened 1seq one with", onefile.givenCount('S'), "sequences")
+
+while onefile.readLine():
+    if onefile.lineType() == 'S':
+        print("Sequence length", onefile.length())
+```
+
 ## Further work
 * Use `setuptools` to compile and install, so the library will be available system-wide and publishable to `pip`.
