@@ -15,6 +15,7 @@
 
 #include <string>
 #include <stdexcept>
+#include <vector>
 using namespace std ;
 
 namespace C_1F {	// private namespace for C interface
