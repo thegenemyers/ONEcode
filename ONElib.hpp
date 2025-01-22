@@ -73,6 +73,8 @@ class ONEfile
     }
   ~ONEfile () { C_1F::oneFileClose (of) ; }
 
+  bool      checkSchema (ONEschema &schema, bool isRequired)
+  { return C_1F::oneFileCheckSchema (of, schema.os, isRequired) ; }
   bool      checkSchemaText (const string &text)
     { return C_1F::oneFileCheckSchemaText (of, text.c_str()) ; }
 
@@ -137,6 +139,7 @@ class ONEfile
 
   char      lineType() { return of->lineType ; }
   int64_t   lineNumber() { return of->line ; }
+  string    fileName() { return of->fileName ; }
   int64_t   givenCount(char lineType) { return of->info[lineType]->given.count ; }
   int64_t   givenMax(char lineType) { return of->info[lineType]->given.max ; }
   int64_t   givenTotal(char lineType) { return of->info[lineType]->given.total ; }
