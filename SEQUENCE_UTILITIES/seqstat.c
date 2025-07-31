@@ -5,7 +5,7 @@
  * Description:
  * Exported functions:
  * HISTORY:
- * Last edited: Sep 28 00:51 2024 (rd109)
+ * Last edited: Jul 31 10:46 2025 (rd109)
  * * May 19 09:12 2024 (rd109): renamed composition to seqstat, for consistency
  * Created: Sun Nov 11 17:21:40 2018 (rd109)
  *-------------------------------------------------------------------
@@ -28,6 +28,7 @@ void usage (void)
   fprintf (stderr, "    -q : show quality counts\n") ;
   fprintf (stderr, "    -t : show time and memory used\n") ;
   fprintf (stderr, "    -l : show length distribution in up to %d quadratic bins\n", lengthBins) ;
+  fprintf (stderr, "    -e : show name length [desc] per entry\n") ;
   exit (0) ;
 }
 
@@ -36,6 +37,7 @@ int main (int argc, char *argv[])
   --argc ; ++argv ;
   U64   *totBase = 0, *totQual = 0 ;
   bool  isTime = false ;
+  bool  isEntry = false ;
   Array lengthCount = 0, lengthSum = 0 ;
 
   if (!argc) usage () ;
@@ -44,6 +46,7 @@ int main (int argc, char *argv[])
     if (!strcmp (*argv, "-b")) { totBase = new0 (256, U64) ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-q")) { totQual = new0 (256, U64) ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-t")) { isTime = true ; --argc ; ++argv ; }
+    else if (!strcmp (*argv, "-e")) { isEntry = true ; --argc ; ++argv ; }
     else if (!strcmp (*argv, "-l"))
       { lengthCount = arrayCreate (10000, int) ;
 	lengthSum = arrayCreate (10000, U64) ;
@@ -72,7 +75,12 @@ int main (int argc, char *argv[])
 	{ char *q = sqioQual(si), *e = q + si->seqLen ;
 	  while (q < e) ++totQual[(int)*q++] ;
 	}
+      if (isEntry)
+	{ printf ("%s\t%lld", sqioId(si), (long long)si->seqLen) ;
+	  if (si->descLen) printf ("\t%s\n", sqioDesc(si)) ; else putchar ('\n') ;
+	}
     }
+  if (isEntry) exit (0) ;
   printf ("%s file, %llu sequences >= 0, %llu total, %.2f average, %llu min, %llu max\n",
 	  seqIOtypeName[si->type], si->nSeq, totLen, totLen / (double) si->nSeq, lenMin, lenMax) ;
   if (totBase)
