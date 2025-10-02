@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Oct  2 09:25 2025 (rd109)
+ * Last edited: Oct  2 10:26 2025 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -260,8 +260,9 @@ OneFile *oneFileOpenRead (const char *path, OneSchema *schema, const char *type,
   //   All header information (if present) is read.
   // 'schema' is also optional.  If it is NULL then the file must contain its own schema.  
   //   If 'schema' is present then it must support 'type', and if the file contains its 
-  //   own schema, then that must match 'schema' where they share line types (there can be
-  //   additional record types in both the file's schema, and in the argument 'schema').
+  //   own schema, then that must match 'schema' where they share line types and there is data
+  //   in the file (there can be additional record types in both the file's schema, and in the
+  //   argument 'schema'), and unused line types in the file schema don't need to match.
   // If nthreads > 1 then nthreads OneFiles are generated as an array and the pointer
   //   to the first, called the master, is returned.  The other nthreads-1 files are
   //   called slaves.  The package routines are aware of when a OneFile argument is a
@@ -273,8 +274,10 @@ bool oneFileCheckSchema (OneFile *of, OneSchema *schema, bool isRequired) ;
 bool oneFileCheckSchemaText (OneFile *of, const char *textSchema) ;
 
   // Checks if file schema is consistent with provided schema.  Mismatches are reported to stderr.
-  // Filetype and all linetypes must match.  File schema can contain additional linetypes.
-  // If isRequired is true then file schema must have all line types in supplied schema.
+  // The filetype must match.  If isRequired is true then file schema must have all linetypes in
+  // supplied schema, and all linetypes must match.  The file schema can contain additional
+  // linetypes. If isRequired is false then only line types present in both the supplied schema and
+  // the file schema, and for which there is data in the file, must match.
   // e.g. if (!oneFileCheckSchemaText (of, "P 3 seq\nD S 1 3 DNA\nD Q 1 6 STRING\nD P 0\n")) die () ;
   // This is provided to enable a program to ensure that its assumptions about data layout
   // are satisfied.
