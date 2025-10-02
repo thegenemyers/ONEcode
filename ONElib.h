@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Dec  1 01:00 2024 (rd109)
+ * Last edited: Jul  2 16:14 2025 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -220,8 +220,8 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
   //      P <primary file type>   // a short string
   //      S <secondary file type> // a short string - any number of these
   //      O <char> <field_list>   // definition of object type - these are indexed
-  //      G <char> <field_list>   // definition of group type - indexed and accumulate stats
   //      D <char> <field_list>   // definition of normal line type
+  //      G <char>                // the current object type "groups" objects of the designated type
   //   <char> must be a lower or upper case letter. By convention upper case letters are used
   //      for objects and records within objects, and lower case letters for groups and records not
   //      assigned to objects, including global and group information.
@@ -230,12 +230,11 @@ OneSchema *oneSchemaCreateFromText (const char *text) ;
   //      Only one list type (STRING, *_LIST or DNA) is allowed per line type.
   //   All the D lines following an O line apply to that object.
   //   By convention comments on each schema definition line explain the definition.
-  //   Example, with lists and strings preceded by their length as required in ONEcode
+  //   Example:
   //      P 3 seq                            this is a sequence file
   //      O S 1 3 DNA                        the DNA sequence - each S line starts an object
   //      D Q 1 6 STRING                     the phred encoded quality score + ASCII 33
   //      D N 4 4 REAL 4 REAL 4 REAL 4 REAL  signal to noise ratio in A, C, G, T channels
-  //      G g 2 3 INT 6 STRING               group designator: number of objects, name
   // The ...FromText() alternative writes the text to a temp file and reads it with 
   //   oneSchemaCreateFromFile(). This allows code to set the schema.
   // Internally a schema is a linked list of OneSchema objects, with the first holding
