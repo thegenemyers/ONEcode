@@ -47,9 +47,9 @@ The documents describing the framework, generic tools, and development library a
 a standard C library interface for ONEcode developers.
 
 In addition, specific technical documentation can be found within
-individual source files, in particular ```ONElib.h```.
+individual source files, in particular ```ONElib.h```. Note that the specification and associated documentation for the library in ```ONElib.h``` supersedes that in the Library-interface.md file and is definitive.
 
 Authors:  Richard Durbin & Gene Myers
 
 Date: October 2022  
-Updated: July 2024
+Updated: October 2025
