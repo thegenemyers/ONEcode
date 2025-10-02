@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Oct  2 10:00 2025 (rd109)
+ * Last edited: Oct  2 10:15 2025 (rd109)
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
@@ -2008,7 +2008,7 @@ bool oneFileCheckSchema (OneFile *vf, OneSchema *vs, bool isRequired)
 	{ snprintf (errorString, 1024, "OneSchema mismatch: record type %c missing in file schema\n", i) ;
 	  isMatch = false ;
 	}
-      else if (vis && vif && vif->given.count > 0) // check fields that have data
+      else if (vis && vif && (isRequired || vif->given.count > 0)) // check fields that have data
 	{ if (vif->isObject != vis->isObject)
 	    { snprintf (errorString, 1024, "OneSchema mismatch: object type %c file %d != schema %d\n",
 		       i, vif->isObject, vis->isObject) ;
