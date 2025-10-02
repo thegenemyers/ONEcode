@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Oct  2 09:07 2025 (rd109)
+ * Last edited: Oct  2 09:25 2025 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -386,7 +386,7 @@ void oneWriteComment (OneFile *of, char *format, ...); // can not include newlin
   // Adds a comment to the current line. Extends line in ascii, adds special line type in binary.
 
 static inline void oneWriteLineFrom (OneFile *of, OneFile *source)
-{ memcpy (of->field, source->field, source->info[source->lineType]->nField*sizeof(OneField)) ;
+{ memcpy (of->field, source->field, source->info[(int)source->lineType]->nField*sizeof(OneField)) ;
   oneWriteLine (of, source->lineType, oneLen(source), _oneList(source)) ;
   char *s = oneReadComment (source) ; if (s) oneWriteComment (of, "%s", s) ;
 }
