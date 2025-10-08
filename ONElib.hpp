@@ -140,12 +140,9 @@ class ONEfile
   char      lineType() { return of->lineType ; }
   int64_t   lineNumber() { return of->line ; }
   string    fileName() { return of->fileName ; }
-  int64_t   givenCount(char lineType) { return of->info[(int)lineType]->given.count ; }
-  int64_t   givenMax(char lineType) { return of->info[(int)lineType]->given.max ; }
-  int64_t   givenTotal(char lineType) { return of->info[(int)lineType]->given.total ; }
-  int64_t   currentCount(char lineType) { return of->info[(int)lineType]->accum.count ; }
-  int64_t   currentMax(char lineType) { return of->info[(int)lineType]->accum.max ; }
-  int64_t   currentTotal(char lineType) { return of->info[(int)lineType]->accum.total ; }
+  int64_t   count(char lineType) { return of->isWrite ? of->info[(int)lineType]->accum.count :  of->info[(int)lineType]->given.count ; }
+  int64_t   max(char lineType) { return of->isWrite ? of->info[(int)lineType]->accum.max : of->info[(int)lineType]->given.max ; }
+  int64_t   total(char lineType) { return of->isWrite ? of->info[(int)lineType]->accum.total : of->info[(int)lineType]->given.total ; }
 } ;
 
 #ifdef TEST_HEADER
@@ -170,7 +167,7 @@ int main (int argc, char *argv[])
   ONEschema os(schemaText) ;
   ONEfile of(argv[1], "r", os, "", 1) ;
 
-  cout << "opened 1seq file " << string(argv[1]) << " with " << of.givenCount('S') << " sequences\n" ;
+  cout << "opened 1seq file " << string(argv[1]) << " with " << of.count('S') << " sequences\n" ;
   
   while (of.readLine())
     if (of.lineType() == 'S')
