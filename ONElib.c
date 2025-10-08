@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Oct  8 12:20 2025 (rd109)
+ * Last edited: Oct  8 13:39 2025 (rd109)
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
@@ -204,11 +204,11 @@ static void schemaAddInfoFromLine (OneSchema *vs, OneFile *vf, char t, char type
 { // assumes field specification is in the STRING_LIST of the current vf line
   // need to set vi->comment separately
   
-  static OneType a[32] ;
-  int            i ;
-  OneType        j ;
-  char          *s = oneString(vf) ;
-  int            n = oneLen(vf) ;
+  OneType  a[32] ;
+  int      i ;
+  OneType  j ;
+  char    *s = oneString(vf) ;
+  int      n = oneLen(vf) ;
   
   if (n > 32)
     die ("line specification %d fields too long - need to recompile", n) ;
@@ -277,8 +277,6 @@ static OneSchema *schemaLoadRecord (OneSchema *vs, OneFile *vf)
 
 static void oneFileDestroy (OneFile *vf) ; // need a forward declaration here
 
-static _Thread_local bool isBootStrap = false ;
-
 OneSchema *oneSchemaCreateFromFile (const char *filename)
 {
   FILE *fs = fopen (filename, "r") ;
@@ -287,7 +285,6 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
 
   OneSchema *vs = new0 (1, OneSchema) ;
 
-  isBootStrap = true ;
   OneFile *vf = new0 (1, OneFile) ;      // shell object to support bootstrap
   // bootstrap specification of linetypes to read schemas
   { OneInfo *vi ;
@@ -306,7 +303,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   // first load the universal header and footer (non-alphabetic) line types 
   // do this by writing their schema into a temporary file and parsing it into the base schema
   { errno = 0 ;
-    static char template[64] ;
+    char template[64] ;
 // #define VALGRIND_MACOS
 #ifdef VALGRIND_MACOS // MacOS valgrind is missing functions to make temp files it seems
     sprintf (template, "/tmp/OneSchema.%d", getpid()) ;
@@ -374,8 +371,6 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
     vs = schemaLoadRecord (vs, vf) ;
   oneFileDestroy (vf) ;
 
-  isBootStrap = false ;
-  
   return vs0 ;
 }
 
@@ -398,7 +393,7 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
   // static char template[64] ;
   // sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
   
-  char template[] = "/tmp/OneTextSchema-XXXXXX.schema" ;
+  char template[] = "/tmp/OneTextSchema-XXXXXX" ;
   errno = 0 ;
   int fd = mkstemp(template) ;
   if (fd == -1) die ("failed to make temporary file %s for writing schema to - errno %d", template, errno) ;
@@ -1105,8 +1100,6 @@ char oneReadLine (OneFile *vf)
       t = x;
     }
   vf->lineType = t;
-
-  // if (!isBootStrap) fprintf (stderr, "reading line %d type %c\n", (int)vf->line, t) ;
 
   li = vf->info[(int) t];
   if (li == NULL)
