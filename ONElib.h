@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Oct  2 10:26 2025 (rd109)
+ * Last edited: Oct  8 16:05 2025 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -360,7 +360,7 @@ bool oneInheritDeferred   (OneFile *of, OneFile *source);
   // Add all provenance/reference/deferred entries in source to header of of.  Must be
   //   called before first call to oneWriteLine.
 
-bool oneAddProvenance (OneFile *of, const char *prog, const char *version, char *format, ...);
+bool oneAddProvenance (OneFile *of, const char *prog, const char *version, const char *format, ...);
 bool oneAddReference  (OneFile *of, const char *filename, I64 count);
 bool oneAddDeferred   (OneFile *of, const char *filename);
 
@@ -384,7 +384,7 @@ void oneWriteLineDNA2bit (OneFile *of, char lineType, I64 listLen, U8 *dnaBuf);
 // Minor variants of oneWriteLine().
 // Use oneWriteLineDNA2bit for DNA lists if your DNA is already 2-bit compressed.
 
-void oneWriteComment (OneFile *of, char *format, ...); // can not include newline \n chars
+void oneWriteComment (OneFile *of, const char *format, ...); // can not include newline \n chars
 
   // Adds a comment to the current line. Extends line in ascii, adds special line type in binary.
 

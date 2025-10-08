@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Oct  8 13:39 2025 (rd109)
+ * Last edited: Oct  8 16:12 2025 (rd109)
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
@@ -2081,7 +2081,7 @@ bool addProvenance(OneFile *vf, OneProvenance *from, int n)
 bool oneInheritProvenance(OneFile *vf, OneFile *source)
 { return (addProvenance(vf, source->provenance, source->info['!']->accum.count)); }
 
-bool oneAddProvenance(OneFile *vf, const char *prog, const char *version, char *format, ...)
+bool oneAddProvenance(OneFile *vf, const char *prog, const char *version, const char *format, ...)
 { va_list args ;
   OneProvenance p;
   time_t t = time(NULL);
@@ -2585,7 +2585,7 @@ void oneWriteLineDNA2bit (OneFile *vf, char lineType, I64 len, U8 *dnaBuf) // NB
   free (s) ;
 }
 
-void oneWriteComment (OneFile *vf, char *format, ...)
+void oneWriteComment (OneFile *vf, const char *format, ...)
 {
   char *comment ;
   
@@ -2595,7 +2595,7 @@ void oneWriteComment (OneFile *vf, char *format, ...)
   va_end (args) ;
 
   if (vf->isCheckString) // then check no newlines in format
-    { char *s = format ;
+    { char *s = (char*) format ;
       while (*s) if (*s++ == '\n') die ("newline in comment string: %s", comment) ;
     }
 
