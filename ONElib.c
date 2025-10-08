@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Oct  2 10:15 2025 (rd109)
+ * Last edited: Oct  8 12:11 2025 (rd109)
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
@@ -91,7 +91,7 @@ static inline I64 ltfRead (FILE *f) ;
 
 // error handling
 
-static char errorString[1024] ;
+static _Thread_local char errorString[1024] ;
 
 char *oneErrorString (void) { return errorString ; }
 
@@ -307,7 +307,7 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   // do this by writing their schema into a temporary file and parsing it into the base schema
   { errno = 0 ;
     static char template[64] ;
-#define VALGRIND_MACOS
+// #define VALGRIND_MACOS
 #ifdef VALGRIND_MACOS // MacOS valgrind is missing functions to make temp files it seems
     sprintf (template, "/tmp/OneSchema.%d", getpid()) ;
     vf->f = fopen (template, "w+") ;
@@ -394,12 +394,16 @@ static char *schemaFixNewlines (const char *text)
   
 OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and call CreateFromFile()
 {
-  static char template[64] ;
-  sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
-
+  // Claude points out that the getpid() solution below is not threadsafe.  So it proposed the code below.
+  // static char template[64] ;
+  // sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
+  
+  char template[] = "/tmp/OneTextSchema-XXXXXX.schema" ;
   errno = 0 ;
-  FILE *f = fopen (template, "w") ;
-  if (!f) die ("failed to open temporary file %s for writing schema to", template) ;
+  int fd = mkstemp(template) ;
+  if (fd == -1) die ("failed to make temporary file %s for writing schema to - errno %d", template, errno) ;
+  FILE *f = fdopen(fd, "w") ;
+  if (!f) die ("failed to fdopen temporary file %s for writing schema to - errno %d", template, errno) ;
   char *fixedText = schemaFixNewlines (text) ;
   char *s = fixedText ;
   while (*s && *s != 'P')
