@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Oct  8 16:12 2025 (rd109)
+ * Last edited: Oct 12 23:35 2025 (rd109)
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
@@ -2521,7 +2521,7 @@ void oneWriteLine (OneFile *vf, char t, I64 listLen, void *listBuf)
   // ASCII - write field by field
 
   else
-    { if (!vf->isHeaderOut && !vf->isNoAsciiHeader) writeHeader (vf) ;
+    { if (!vf->isHeaderOut && !vf->isNoAsciiHeader && vf->share >= 0) writeHeader (vf) ;
 
       if (!vf->isLastLineBinary)      // terminate previous ascii line
 	fputc ('\n', vf->f);
