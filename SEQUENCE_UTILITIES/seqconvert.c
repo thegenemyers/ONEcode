@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: Jan  4 13:33 2025 (rd109)
+ * Last edited: Dec 15 17:27 2025 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -31,7 +31,7 @@ int main (int argc, char *argv[])
   timeUpdate (stdout) ;
 
   if (!argc || !strcmp(*argv,"-h") || !strcmp(*argv,"--help"))
-    { fprintf (stderr, "Usage: seqconvert [-fa|fq|b|1] [-Q T] [-H|U] [-K|J] [-KT T] [-z] [-S] [-o outfile] [infile]\n") ;
+    { fprintf (stderr, "Usage: seqconvert [-fa|fq|b|1] [-t] [-Q T] [-H|U] [-K|J] [-KT T] [-z] [-S] [-R cramRefFile] [-o outfile] [infile]\n") ;
       fprintf (stderr, "   autodetects input file type: fasta/q (.gz), binary, ONEcode, BAM/SAM\n") ;
       fprintf (stderr, "   .gz ending outfile name implies gzip compression\n") ;
       fprintf (stderr, "   -fa : output as fasta, -fq as fastq, -b as binary, -1 as ONEcode\n") ;
@@ -44,6 +44,7 @@ int main (int argc, char *argv[])
       fprintf (stderr, "   -K  : scaffold break sequences at >KT N's - stores breaks if ONEcode\n") ;
       fprintf (stderr, "   -J  : scaffold rejoin - only works on ONEcode input\n") ;
       fprintf (stderr, "   -KT : sets the threshold for scaffold breaking [20]\n") ;
+      fprintf (stderr, "   -R refFileName : fasta reference file for cram\n") ;
       fprintf (stderr, "   NB gzip is not compatible with binary\n") ;
       fprintf (stderr, "   if no infile then use stdin\n") ;
       fprintf (stderr, "   if no -o option then use stdout and -z implies gzip\n");
@@ -81,6 +82,8 @@ int main (int argc, char *argv[])
       else if (!strcmp (*argv, "-o") && argc > 1)
 	{ --argc ; ++argv ; outFileName = *argv ; }
       else if (!strcmp (*argv, "-S")) isVerbose = false ;
+      else if (!strcmp (*argv, "-R") && argc > 1)
+	{ --argc ; ++argv ; seqIOreferenceFileName (*argv) ; }
       else if (argc == 1 && **argv != '-') inFileName = *argv ;
       else die ("unknown option %s - run without arguments for help\n", *argv) ;
       --argc ; ++argv ;
