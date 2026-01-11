@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Gene Myers, 2019-
  *
  * HISTORY:
- * Last edited: Jan 11 12:59 2026 (rd109)
+ * Last edited: Jan 11 13:33 2026 (rd109)
  * * Dec  3 06:01 2022 (rd109): remove oneWriteHeader(), switch to stdarg for oneWriteComment etc.
  *   * Dec 27 09:46 2019 (gene): style edits
  *   * Created: Sat Feb 23 10:12:43 2019 (rd109)
@@ -437,7 +437,7 @@ I64 oneCountUntilNext (OneFile *of, char countType, char nextType) ;
   // Returns -1 on error, e.g. not reading a binary file, types are not object types.
 
 #define oneReferenceCount(of)   ((of)->info['<'] ? (of)->info['<']->accum.count : 0)
-#define oneProvenanceCount(of)  ((of)->info['>'] ? (of)->info['<']->accum.count : 0)
+#define oneProvenanceCount(of)  ((of)->info['!'] ? (of)->info['<']->accum.count : 0)
 
   // Report how many references or provenances there are for this OneFile.
 

@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: Jan 11 13:00 2026 (rd109)
+ * Last edited: Jan 11 13:33 2026 (rd109)
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
  * * Apr 16 18:59 2024 (rd109): major change to object and group indexing: 0 is start of data
@@ -2159,7 +2159,8 @@ bool oneStats (OneFile *of, char lineType, I64 *count, I64 *max, I64 *total)
   if (!info)  return false ;
   
   OneCounts   counts = of->isWrite ? info->accum : info->given ;
-  if (lineType == '>' || lineType == '<') counts = info->accum ; // true - not sure why - 260111
+  if (lineType == '>' || lineType == '<' || lineType == '!')
+    counts = info->accum ; // true and safe - not sure why we did it this way - 260111
 					    
   if (count) *count = counts.count ;
   if (max)   *max   = counts.max ;
