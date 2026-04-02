@@ -5,7 +5,7 @@
  * Description: utility to convert between sequence formats
  * Exported functions:
  * HISTORY:
- * Last edited: Dec 15 17:27 2025 (rd109)
+ * Last edited: Apr  1 22:55 2026 (rd109)
  * Created: Sun Feb 17 10:23:37 2019 (rd109)
  *-------------------------------------------------------------------
  */
@@ -45,6 +45,8 @@ int main (int argc, char *argv[])
       fprintf (stderr, "   -J  : scaffold rejoin - only works on ONEcode input\n") ;
       fprintf (stderr, "   -KT : sets the threshold for scaffold breaking [20]\n") ;
       fprintf (stderr, "   -R refFileName : fasta reference file for cram\n") ;
+      fprintf (stderr, "   -noId : don't write the ID - mostly for -1 option\n") ;
+      fprintf (stderr, "   -noQual : don't write the quals\n") ;
       fprintf (stderr, "   NB gzip is not compatible with binary\n") ;
       fprintf (stderr, "   if no infile then use stdin\n") ;
       fprintf (stderr, "   if no -o option then use stdout and -z implies gzip\n");
@@ -59,6 +61,8 @@ int main (int argc, char *argv[])
   bool isScaffold = false ;
   bool isJoin = false ;
   bool isTime = false ;
+  bool isId = true ;
+  bool isNoQual = false ;
   char *inFileName = "-" ;
   char *outFileName = "-z" ;
   int qualThresh = 30 ;
@@ -77,6 +81,8 @@ int main (int argc, char *argv[])
       else if (!strcmp (*argv, "-t")) isTime = true ;
       else if (!strcmp (*argv, "-K")) isScaffold = true ;
       else if (!strcmp (*argv, "-J")) isJoin = true ;
+      else if (!strcmp (*argv, "-noId")) isId = false ;
+      else if (!strcmp (*argv, "-noQual")) isNoQual = true ;
       else if (!strcmp (*argv, "-KT") && argc > 1)
 	{ --argc ; ++argv ; scaffThresh = atoi (*argv) ; }
       else if (!strcmp (*argv, "-o") && argc > 1)
@@ -116,7 +122,7 @@ int main (int argc, char *argv[])
       goto cleanup ;
     }
   
-  bool isQual = ((siOut->type == BINARY && qualThresh > 0) || siOut->type == FASTQ || siOut->type == ONE) && !isHoco && !isUnHoco ;
+  bool isQual = ((siOut->type == BINARY && qualThresh > 0) || siOut->type == FASTQ || siOut->type == ONE) && !isHoco && !isUnHoco && !isNoQual ;
   SeqIO *siIn = seqIOopenRead (inFileName, 0, isQual) ;
   if (!siIn) die ("failed to open input file %s", inFileName) ;
   if (isUnHoco && siIn->type != ONE) die ("can only Unhoco ONEcode files") ;
@@ -136,7 +142,7 @@ int main (int argc, char *argv[])
       { U64 seqLen = siIn->seqLen ;
 	if (isScaffold)
 	  scaffoldBreak (siOut,
-			 siIn->idLen ? sqioId(siIn) : 0,
+			 (isId && siIn->idLen) ? sqioId(siIn) : 0,
 			 siIn->descLen ? sqioDesc(siIn) : 0,
 			 seqLen, sqioSeq(siIn),
 			 siIn->isQual ? sqioQual(siIn) : 0,
@@ -144,7 +150,7 @@ int main (int argc, char *argv[])
 	else
 	  { if (isHoco) hoco (sqioSeq(siIn), &seqLen, (siOut->type == ONE) ? &runLengths : 0) ;
 	    seqIOwrite (siOut,
-			siIn->idLen ? sqioId(siIn) : 0,
+			(isId && siIn->idLen) ? sqioId(siIn) : 0,
 			siIn->descLen ? sqioDesc(siIn) : 0,
 			seqLen, sqioSeq(siIn),
 			siIn->isQual ? sqioQual(siIn) : 0) ;
