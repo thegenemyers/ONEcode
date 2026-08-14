@@ -5,7 +5,7 @@
  * Description: buffered package to read arbitrary sequence files - much faster than readseq
  * Exported functions:
  * HISTORY:
- * Last edited: Nov 23 19:16 2024 (rd109)
+ * Last edited: May 29 20:45 2026 (rd109)
  * * Dec 15 09:45 2022 (rd109): separated out 2bit packing/unpacking into SeqPack
  * Created: Fri Nov  9 00:21:21 2018 (rd109)
  *-------------------------------------------------------------------
@@ -350,6 +350,12 @@ bool seqIOread (SeqIO *si)
     }
 
   ++si->nSeq ;
+  si->totSeqLen += si->seqLen ;
+  if (si->seqLen > si->maxSeqLen) si->maxSeqLen = si->seqLen ;
+  si->totIdLen += si->idLen ;
+  if (si->idLen > si->maxIdLen) si->maxIdLen = si->idLen ;
+  si->totDescLen += si->descLen ;
+  if (si->descLen > si->maxDescLen) si->maxDescLen = si->descLen ;
   return true ;
 }
 
