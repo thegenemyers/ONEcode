@@ -5,7 +5,7 @@ DESTDIR = ~/bin
 CFLAGS = -O3
 #CFLAGS = -g				# for debugging
 
-ALL = seqconvert seqextract seqstat
+ALL = seqconvert seqextract seqstat seqsample
 
 all: $(ALL)
 
@@ -41,6 +41,9 @@ seqextract: seqextract.c seqio.o ONElib.o $(UTILS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
 
 seqstat: seqstat.c seqio.o ONElib.o $(UTILS_OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
+
+seqsample: seqsample.c seqio.o ONElib.o $(UTILS_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(SEQIO_LIBS)
 
 ONElogan: ONElogan.c ONElib.o
