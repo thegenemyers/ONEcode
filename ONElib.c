@@ -7,7 +7,7 @@
  *  Copyright (C) Richard Durbin, Cambridge University and Eugene Myers 2019-
  *
  * HISTORY:
- * Last edited: May 14 16:36 2026 (rd109)
+ * Last edited: Aug 14 13:33 2026 (rd109)
  * * May 14 16:34 2026 (rd109): made list (including DNA) read/write work with len > 2G
  * * Oct  2 09:30 2025 (rd109): add localPath in OpenRead to try <path>.1<type> if <path> fails
  * * May  1 00:23 2024 (rd109): moved to OneInfo->index and multiple objects/groups
@@ -304,14 +304,16 @@ OneSchema *oneSchemaCreateFromFile (const char *filename)
   // first load the universal header and footer (non-alphabetic) line types 
   // do this by writing their schema into a temporary file and parsing it into the base schema
   { errno = 0 ;
-    char template[64] ;
 // #define VALGRIND_MACOS
+    char template[4096] ;
+    const char *tmpdir = getenv("TMPDIR") ;
+    if (!tmpdir) tmpdir = "/tmp" ;
 #ifdef VALGRIND_MACOS // MacOS valgrind is missing functions to make temp files it seems
-    sprintf (template, "/tmp/OneSchema.%d", getpid()) ;
+    snprintf (template, sizeof(template), "%s/OneSchema-%d", getpid()) ;
     vf->f = fopen (template, "w+") ;
     if (errno) die ("failed to open temporary file %s errno %d\n", template, errno) ;
 #else
-    strcpy (template, "/tmp/OneSchema.XXXXXX") ;
+    snprintf (template, sizeof(template), "%s/OneSchema-XXXXXX", tmpdir) ;
     int fd = mkstemp (template) ;
     if (errno) die ("failed to open temporary file %s errno %d\n", template, errno) ;
     vf->f = fdopen (fd, "w+") ;
@@ -394,7 +396,10 @@ OneSchema *oneSchemaCreateFromText (const char *text) // write to temp file and 
   // static char template[64] ;
   // sprintf (template, "/tmp/OneTextSchema-%d.schema", getpid()) ;
   
-  char template[] = "/tmp/OneTextSchema-XXXXXX" ;
+  char template[4096];
+  const char *tmpdir = getenv("TMPDIR");
+  if (!tmpdir) tmpdir = "/tmp";
+  snprintf(template, sizeof(template), "%s/OneTextSchema-XXXXXX", tmpdir);
   errno = 0 ;
   int fd = mkstemp(template) ;
   if (fd == -1) die ("failed to make temporary file %s for writing schema to - errno %d", template, errno) ;
