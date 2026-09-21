@@ -15,6 +15,7 @@ all: $(LIB) $(PROGS)
 clean:
 	$(RM) *.o ONEstat ONEview $(LIB) ZZ* TEST/ZZ* ONEcpptest.cpp ONEcpptest
 	$(RM) -r *.dSYM
+	$(RM) ONEcode*.so
 
 install:
 	cp $(PROGS) $(DEST_DIR)
@@ -56,5 +57,18 @@ ONEcpptest: ONEcpptest.cpp ONElib.o
 
 cpptest: ONEcpptest
 	./ONEcpptest TEST/ZZ-small.1seq
+
+### Python bindings
+
+python: $(LIB)
+	$(CCPP) -O3 -Wall -shared -std=c++11 -fPIC -undefined dynamic_lookup \
+		$$(python3 -m pybind11 --includes) pyONElib.cpp \
+		-o ONEcode$$(python3-config --extension-suffix) ONElib.o
+
+python-test: python
+	python3 -c "import ONEcode; print('ONEcode module loaded successfully')"
+
+python-install: python
+	pip3 install -e .
 
 ### end of file
