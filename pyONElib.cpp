@@ -5,6 +5,13 @@
 
 namespace py = pybind11;
 
+// Python passes line types as one-character strings
+static char lineTypeChar (const std::string &lineType)
+{
+    if (lineType.length() != 1) throw std::invalid_argument("lineType must be a single character");
+    return lineType[0];
+}
+
 PYBIND11_MODULE(ONEcode, m) {
     py::class_<ONEschema>(m, "ONEschema")
         .def(py::init<const std::string &>());
@@ -15,7 +22,11 @@ PYBIND11_MODULE(ONEcode, m) {
         .def(py::init<const std::string &, const std::string &, const ONEschema &, const std::string &, int>())
         .def(py::init<const std::string &, const std::string &, ONEfile &, int>())
         .def("checkSchemaText", &ONEfile::checkSchemaText)
-        .def("readLine", &ONEfile::readLine)
+        // the type of the line read, or "" at the end of the file, so that "while f.readLine():" terminates
+        .def("readLine", [](ONEfile &self) {
+            char t = self.readLine();
+            return t ? std::string(1, t) : std::string();
+        })
         .def("length", &ONEfile::listLength)
         .def("getInt", &ONEfile::getInt)
         .def("setInt", &ONEfile::setInt)
@@ -33,48 +44,9 @@ PYBIND11_MODULE(ONEcode, m) {
         .def("gotoObject", &ONEfile::gotoObject)
         .def("lineType", &ONEfile::lineType)
         .def("lineNumber", &ONEfile::lineNumber)
-        
-        // Updated function bindings to handle string-to-char conversion
-        .def("givenCount", [](ONEfile &self, const std::string &lineType) {
-            if (lineType.length() != 1) {
-                throw std::invalid_argument("lineType must be a single character");
-            }
-            return self.givenCount(static_cast<unsigned char>(lineType[0]));
-        })
-        
-        .def("givenMax", [](ONEfile &self, const std::string &lineType) {
-            if (lineType.length() != 1) {
-                throw std::invalid_argument("lineType must be a single character");
-            }
-            return self.givenMax(static_cast<unsigned char>(lineType[0]));
-        })
-
-        .def("givenTotal", [](ONEfile &self, const std::string &lineType) {
-            if (lineType.length() != 1) {
-                throw std::invalid_argument("lineType must be a single character");
-            }
-            return self.givenTotal(static_cast<unsigned char>(lineType[0]));
-        })
-
-        .def("currentCount", [](ONEfile &self, const std::string &lineType) {
-            if (lineType.length() != 1) {
-                throw std::invalid_argument("lineType must be a single character");
-            }
-            return self.currentCount(static_cast<unsigned char>(lineType[0]));
-        })
-
-        .def("currentMax", [](ONEfile &self, const std::string &lineType) {
-            if (lineType.length() != 1) {
-                throw std::invalid_argument("lineType must be a single character");
-            }
-            return self.currentMax(static_cast<unsigned char>(lineType[0]));
-        })
-
-        .def("currentTotal", [](ONEfile &self, const std::string &lineType) {
-            if (lineType.length() != 1) {
-                throw std::invalid_argument("lineType must be a single character");
-            }
-            return self.currentTotal(static_cast<unsigned char>(lineType[0]));
-        });
+        // number, maximum length and total length of lines of a type: as given in the header when
+        // reading, and as accumulated so far when writing
+        .def("count", [](ONEfile &self, const std::string &t) { return self.count(lineTypeChar(t)); })
+        .def("max",   [](ONEfile &self, const std::string &t) { return self.max(lineTypeChar(t)); })
+        .def("total", [](ONEfile &self, const std::string &t) { return self.total(lineTypeChar(t)); });
 }
-
